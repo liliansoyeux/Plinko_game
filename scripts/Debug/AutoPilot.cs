@@ -17,6 +17,7 @@ namespace Plinko;
 //   --tabs                 cycle through the shop tabs (for screenshots)
 //   --skills-at=<sec>      open the skill tree once at that time (for screenshots)
 //   --no-prestige          never prestige
+//   --prestige-at=<sec>    force one prestige (hardest unlocked shoes) at that real time
 public partial class AutoPilot : Node
 {
     private readonly Dictionary<string, string> _args = new();
@@ -36,6 +37,7 @@ public partial class AutoPilot : Node
     private double _runStart;
     private int _tab;
     private double _skillsAt = -1;
+    private double _prestigeAt = -1;
     private bool _skillsShown;
     private double _skillsOpenedAt;
     private readonly RandomNumberGenerator _rng = new();
@@ -52,6 +54,7 @@ public partial class AutoPilot : Node
         _minutes = Parse("minutes", 10);
         _shotEvery = Parse("shot-every", 4);
         _skillsAt = Parse("skills-at", -1);
+        _prestigeAt = Parse("prestige-at", -1);
         if (_args.TryGetValue("shots", out var dir) && DisplayServer.GetName() != "headless")
         {
             _shotDir = dir;
@@ -173,6 +176,12 @@ public partial class AutoPilot : Node
 
         // Prestige once the jetons on offer are worth it and the run has had time to grow.
         int gain = idle.JetonsForPrestige;
+        if (_prestigeAt > 0 && _realTime > _prestigeAt && gain >= 1)
+        {
+            _prestigeAt = -1;
+            game.RequestPrestige(Characters.All[idle.UnlockedShoes - 1]);
+            return;
+        }
         // Typical player heuristic: prestige once it at least doubles your jetons.
         if (!_args.ContainsKey("no-prestige") && gain >= Math.Max(4, idle.JetonsEarnedTotal) && _gameTime - _runStart > 300)
         {
