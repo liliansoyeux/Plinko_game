@@ -5,49 +5,40 @@ using System.Globalization;
 
 namespace Plinko;
 
-// Debug-only bot, enabled with `-- --autopilot` on the command line. Plays the game by
-// itself (start, aim, drop, pick cards, restart), can take screenshots and prints a
-// per-run summary — used to smoke-test and balance without a human at the keyboard.
+// Debug-only bot for the incremental version, enabled with `-- --autopilot`. It plays
+// greedily (drops, buys the most efficient ball or cheapest upgrade, places portals,
+// prestiges, spends jetons) and logs the economy, to smoke-test and balance the game.
+// It never writes the player's save.
 //
-//   --autopilot            enable
-//   --runs=N               stop after N finished runs (default 1)
-//   --char=<id>            shoes to use (default: random each run)
+//   --minutes=<n>          stop after n minutes of game time (default 10)
 //   --shots=<dir>          save screenshots there (windowed runs only)
-//   --shot-every=<sec>     screenshot interval (default 4)
-//   --quit-after=<sec>     hard stop
-//   --fast                 run the game at x2 speed
-//   --pause-at=<sec>       open the pause menu once at that time (for screenshots)
-//   --title-wait=<sec>     how long to stay on the title screen (default 1.5)
-//   --jump=<palier>        jump straight to that palier number on the first run
-//   --rows=<n>             force the peg row count on the first run
-//   --give=<id,id,...>     apply these upgrade ids at the start of the first run
-//   --chips=<n>            grant chips (in memory only; saving is disabled for the bot)
-//   --skills=<n>           visit the skill tree first and buy up to n random nodes
-//   --dump-sfx=<dir>       write every synthesized sound as a .wav
-//   --mouse                drive everything with synthetic mouse clicks instead of calling
-//                          methods directly (validates GUI/mouse-filter routing)
+//   --shot-every=<sec>     screenshot interval in real seconds (default 4)
+//   --grant=<coins>,<jetons>  start with extra coins / jetons
+//   --tabs                 cycle through the shop tabs (for screenshots)
+//   --skills-at=<sec>      open the skill tree once at that time (for screenshots)
+//   --no-prestige          never prestige
 public partial class AutoPilot : Node
 {
     private readonly Dictionary<string, string> _args = new();
-    private double _time;
-    private double _stateTime;
-    private string _lastState = "";
-    private double _nextShot;
-    private int _shotIndex;
-    private int _runsDone;
-    private int _runsWanted = 1;
-    private double _quitAfter = -1;
-    private double _pauseAt = -1;
-    private bool _pauseDone;
-    private double _dropTimer;
-    private string _shotDir;
+    private double _gameTime;
+    private double _realTime;
+    private double _nextShot = 1.0;
     private double _shotEvery = 4;
-    private double _titleWait = 1.5;
-    private int _skillsToBuy;
-    private bool _skillsVisited;
-    private bool _rerollTried;
+    private int _shotIndex;
+    private string _shotDir;
+    private double _minutes = 10;
+    private double _buyTimer;
+    private double _dropTimer;
+    private double _aimTimer;
+    private double _logTimer;
+    private double _tabTimer;
+    private double _placeTimer;
+    private double _runStart;
+    private int _tab;
+    private double _skillsAt = -1;
+    private bool _skillsShown;
+    private double _skillsOpenedAt;
     private readonly RandomNumberGenerator _rng = new();
-    private readonly List<string> _summaries = new();
 
     public override void _Ready()
     {
@@ -58,305 +49,174 @@ public partial class AutoPilot : Node
             var parts = arg.TrimStart('-').Split('=', 2);
             _args[parts[0]] = parts.Length > 1 ? parts[1] : "true";
         }
-
-        _runsWanted = int.Parse(_args.GetValueOrDefault("runs", "1"));
-        _quitAfter = double.Parse(_args.GetValueOrDefault("quit-after", "-1"), CultureInfo.InvariantCulture);
-        _pauseAt = double.Parse(_args.GetValueOrDefault("pause-at", "-1"), CultureInfo.InvariantCulture);
-        _shotEvery = double.Parse(_args.GetValueOrDefault("shot-every", "4"), CultureInfo.InvariantCulture);
-        _titleWait = double.Parse(_args.GetValueOrDefault("title-wait", "1.5"), CultureInfo.InvariantCulture);
-        _nextShot = 1.0;
+        _minutes = Parse("minutes", 10);
+        _shotEvery = Parse("shot-every", 4);
+        _skillsAt = Parse("skills-at", -1);
         if (_args.TryGetValue("shots", out var dir) && DisplayServer.GetName() != "headless")
         {
             _shotDir = dir;
             DirAccess.MakeDirRecursiveAbsolute(_shotDir);
         }
-        if (_args.ContainsKey("seed"))
+        if (_args.TryGetValue("grant", out var grant))
         {
-            _rng.Seed = ulong.Parse(_args["seed"]);
+            var g = grant.Split(',');
+            IdleManager.Instance.DebugGrant(double.Parse(g[0], CultureInfo.InvariantCulture), g.Length > 1 ? int.Parse(g[1]) : 0);
         }
-        if (_args.TryGetValue("dump-sfx", out var sfxDir))
-        {
-            Sfx.DumpAll(sfxDir);
-            GD.Print($"[AutoPilot] sounds written to {sfxDir}");
-        }
-        if (_args.TryGetValue("chips", out var chips))
-        {
-            SaveData.AddChips(int.Parse(chips));
-        }
-        _skillsToBuy = int.Parse(_args.GetValueOrDefault("skills", "0"));
-        GD.Print($"[AutoPilot] enabled: runs={_runsWanted} shots={_shotDir ?? "off"}");
+        GD.Print($"[AutoPilot] idle bot for {_minutes} game minutes");
     }
+
+    private double Parse(string key, double fallback) =>
+        _args.TryGetValue(key, out var v) ? double.Parse(v, CultureInfo.InvariantCulture) : fallback;
 
     public override void _Process(double delta)
     {
         double real = delta / Math.Max(0.01, Engine.TimeScale);
-        _time += real;
+        _realTime += real;
+        if (!GetTree().Paused) _gameTime += delta;
 
-        if (_shotDir != null && _time >= _nextShot)
+        if (_shotDir != null && _realTime >= _nextShot)
         {
-            _nextShot = _time + _shotEvery;
+            _nextShot = _realTime + _shotEvery;
             Screenshot();
         }
-
-        if (_quitAfter > 0 && _time > _quitAfter)
+        if (_gameTime > _minutes * 60.0)
         {
-            Finish("quit-after reached");
+            Log("final");
+            GetTree().Quit();
             return;
         }
 
         var main = Main.Instance;
-        if (main == null || main.IsTransitioning)
+        if (main == null || main.IsTransitioning) return;
+        if (main.Title != null)
         {
+            if (_realTime > 1.5) main.StartGame();
+            return;
+        }
+        var game = main.Game;
+        if (game == null) return;
+
+        if (game.IsPlacing)
+        {
+            _placeTimer += real;
+            if (_placeTimer > 0.8)
+            {
+                _placeTimer = 0;
+                var b = game.Board;
+                game.Placer.ConfirmAt(new Vector2(_rng.RandfRange(b.AimRangeMin - 120f, b.AimRangeMax + 120f), _rng.RandfRange(350f, 650f)));
+            }
             return;
         }
 
-        string state = main.Title != null ? "title"
-            : main.Skills != null ? "skills"
-            : main.Game == null ? "none"
-            : main.Game.IsGameOver ? "gameover"
-            : main.Game.IsPlacing ? "placing"
-            : main.Game.Popup.IsOpen ? "popup"
-            : main.Game.IsUserPaused ? "paused"
-            : "playing";
-        if (state != _lastState)
+        if (game.SkillTree != null)
         {
-            _lastState = state;
-            _stateTime = 0;
-        }
-        _stateTime += real;
-
-        switch (state)
-        {
-            case "title" when _skillsToBuy > 0 && !_skillsVisited && _stateTime > _titleWait:
-                _skillsVisited = true;
-                main.ShowSkillTree();
-                break;
-
-            case "skills" when _stateTime > 1.0:
-                var affordable = new List<SkillNodeCard>();
-                foreach (var card in main.Skills.Cards)
-                {
-                    if (SkillTree.CanBuy(card.Node)) affordable.Add(card);
-                }
-                if (_skillsToBuy > 0 && affordable.Count > 0)
-                {
-                    var chosenCard = affordable[_rng.RandiRange(0, affordable.Count - 1)];
-                    if (Mouse)
-                    {
-                        Click(chosenCard.GetGlobalRect().GetCenter());
-                    }
-                    else
-                    {
-                        main.Skills.OnBuy(chosenCard);
-                    }
-                    _skillsToBuy--;
-                    _stateTime = 0.6;
-                }
-                else if (_stateTime > 3.0)
-                {
-                    main.ShowTitle();
-                }
-                break;
-
-            case "title" when _stateTime > _titleWait:
-                if (Mouse)
-                {
-                    int index = _args.TryGetValue("char", out var id) ? Characters.All.FindIndex(c => c.Id == id) : _rng.RandiRange(0, Characters.All.Count - 1);
-                    Click(new Vector2(30f + 80f + index * 170f, 580f));
-                    Click(main.Title.PlayButton.GetGlobalRect().GetCenter());
-                    _stateTime = -10;
-                }
-                else
-                {
-                    main.StartGame(PickCharacter());
-                }
-                break;
-
-            case "popup" when _stateTime > 0.9 && !_rerollTried && RunManager.Instance.Stats.Rerolls > 0 && _rng.Randf() < 0.5f:
-                _rerollTried = true;
-                GD.Print("[AutoPilot] reroll");
-                Input.ParseInputEvent(new InputEventKey { Keycode = Key.R, Pressed = true });
-                _stateTime = 0.2;
-                break;
-
-            case "popup" when _stateTime > 0.9:
-                _rerollTried = false;
-                var cards = main.Game.Popup.Cards;
-                int pick = _rng.RandiRange(0, cards.Count - 1);
-                if (Mouse)
-                {
-                    Click(cards[pick].GetGlobalRect().GetCenter());
-                }
-                else
-                {
-                    main.Game.Popup.ChooseIndex(pick);
-                }
-                _stateTime = -10; // wait for the next state change
-                break;
-
-            case "placing" when _stateTime > 1.2:
-                var board = main.Game.Board;
-                var spot = new Vector2(_rng.RandfRange(board.AimRangeMin - 150f, board.AimRangeMax + 150f), _rng.RandfRange(330f, 650f));
-                if (Mouse)
-                {
-                    Click(board.ToGlobal(spot));
-                }
-                else
-                {
-                    main.Game.Placer.ConfirmAt(spot);
-                }
-                _stateTime = -10;
-                break;
-
-            case "paused" when _stateTime > 2.0:
-                if (Mouse)
-                {
-                    Click(main.Game.PauseMenu.ResumeButton.GetGlobalRect().GetCenter());
-                }
-                else
-                {
-                    Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, Pressed = true });
-                }
-                _stateTime = -10;
-                break;
-
-            case "gameover" when _stateTime > 2.5:
-                var run = RunManager.Instance;
-                string summary = $"run {_runsDone + 1}: {run.SelectedCharacter.Id} reached palier {run.PalierIndex + 1}, " +
-                                 $"level {run.Level}, malus {run.MalusLevel}, total {run.Record.TotalScore:0}, " +
-                                 $"best hit {run.Record.BestHitPayout:0}, upgrades {run.Record.UpgradesInOrder.Count}, cocktails {run.ActiveModifiers.Count}";
-                GD.Print($"[AutoPilot] {summary}");
-                _summaries.Add(summary);
-                _runsDone++;
-                if (_runsDone >= _runsWanted)
-                {
-                    Finish("all runs done");
-                    return;
-                }
-                if (Mouse)
-                {
-                    Click(main.Game.GameOverOverlay.RetryButton.GetGlobalRect().GetCenter());
-                    _stateTime = -10;
-                }
-                else
-                {
-                    main.StartGame(PickCharacter());
-                }
-                break;
-
-            case "playing":
-                PlayStep(main.Game, real);
-                break;
-        }
-    }
-
-    private bool _jumped;
-
-    private void PlayStep(GameScreen game, double real)
-    {
-        if (!_jumped)
-        {
-            _jumped = true;
-            if (_args.TryGetValue("give", out var give))
-            {
-                foreach (var id in give.Split(','))
-                {
-                    var option = Array.Find(UpgradeCatalog.All, o => o.Id == id);
-                    if (option != null)
-                    {
-                        game.EnqueueDebugUpgrade(option);
-                    }
-                }
-            }
-            if (_args.TryGetValue("rows", out var rows))
-            {
-                RunManager.Instance.DebugModifyStats(s => s.RowCount = int.Parse(rows));
-            }
-            if (_args.TryGetValue("jump", out var jump))
-            {
-                RunManager.Instance.DebugJumpToPalier(int.Parse(jump) - 1);
-                return;
-            }
-        }
-        if (_pauseAt > 0 && !_pauseDone && _time >= _pauseAt)
-        {
-            _pauseDone = true;
-            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, Pressed = true });
+            BuySkills(game.SkillTree);
+            if (_realTime - _skillsOpenedAt > 2.5) game.SkillTree.Close();
             return;
         }
-        if (_args.ContainsKey("fast") && Engine.TimeScale < 1.5)
+        if (_skillsAt > 0 && !_skillsShown && _realTime > _skillsAt)
         {
-            game.ToggleSpeed();
-        }
-
-        _dropTimer -= real;
-        var run = RunManager.Instance;
-        if (_dropTimer > 0 || !run.IsPlaying || run.BallsRemaining <= 0)
-        {
+            _skillsShown = true;
+            OpenSkills(game);
             return;
         }
-        _dropTimer = 0.45 + _rng.Randf() * 0.4;
 
-        float x = _rng.RandfRange(game.Board.AimRangeMin, game.Board.AimRangeMax);
-        if (Mouse)
+        var idle = IdleManager.Instance;
+
+        _aimTimer -= delta;
+        if (_aimTimer <= 0)
         {
-            var target = new Vector2(x, 480f);
-            MoveMouse(target);
-            Click(target);
+            _aimTimer = 4.0;
+            // Aim off-centre sometimes: the edges pay more.
+            float t = _rng.Randf();
+            game.Board.AimAtLocalX(Mathf.Lerp(game.Board.AimRangeMin, game.Board.AimRangeMax, t));
         }
-        else
+
+        if (!idle.HasAutoDropper)
         {
-            game.Board.AimAtLocalX(x);
-            game.Drop();
+            _dropTimer -= delta;
+            if (_dropTimer <= 0)
+            {
+                _dropTimer = 0.15;
+                game.Board.ManualDrop();
+            }
+        }
+
+        _buyTimer -= delta;
+        if (_buyTimer <= 0)
+        {
+            _buyTimer = 0.5;
+            for (int i = 0; i < 6 && idle.BuyCheapestUpgrade(); i++) { }
+            if (!idle.IsMaxed(IdleUpgrade.Portal) && idle.UpgradeCost(IdleUpgrade.Portal) < idle.Coins * 0.5)
+            {
+                idle.BuyUpgrade(IdleUpgrade.Portal);
+            }
+            for (int i = 0; i < 40 && idle.BuyMostEfficientBall(); i++) { }
+        }
+
+        if (_args.ContainsKey("tabs"))
+        {
+            _tabTimer -= real;
+            if (_tabTimer <= 0)
+            {
+                _tabTimer = _shotEvery;
+                game.Shop.SelectTabIndex(_tab++ % 4);
+            }
+        }
+
+        _logTimer -= delta;
+        if (_logTimer <= 0)
+        {
+            _logTimer = 30;
+            Log("tick");
+        }
+
+        // Prestige once the jetons on offer are worth it and the run has had time to grow.
+        int gain = idle.JetonsForPrestige;
+        // Typical player heuristic: prestige once it at least doubles your jetons.
+        if (!_args.ContainsKey("no-prestige") && gain >= Math.Max(4, idle.JetonsEarnedTotal) && _gameTime - _runStart > 300)
+        {
+            var shoe = Characters.All[idle.UnlockedShoes - 1];
+            Log($"prestige +{gain} -> {shoe.Id}");
+            _runStart = _gameTime;
+            game.RequestPrestige(shoe);
+        }
+        else if (idle.Jetons > 0 && _gameTime - _runStart < 5 && _gameTime > 10)
+        {
+            OpenSkills(game);
         }
     }
 
-    private bool Mouse => _args.ContainsKey("mouse");
-
-    private Vector2 ToWindow(Vector2 viewportPosition) => GetViewport().GetScreenTransform() * viewportPosition;
-
-    private void MoveMouse(Vector2 viewportPosition)
+    private void OpenSkills(IdleGameScreen game)
     {
-        var p = ToWindow(viewportPosition);
-        Input.ParseInputEvent(new InputEventMouseMotion { Position = p, GlobalPosition = p });
+        game.OpenSkillTreeOverlay();
+        _skillsOpenedAt = _realTime;
     }
 
-    private void Click(Vector2 viewportPosition)
+    private void BuySkills(SkillTreeOverlay tree)
     {
-        var p = ToWindow(viewportPosition);
-        MoveMouse(viewportPosition);
-        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = p, GlobalPosition = p });
-        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = p, GlobalPosition = p });
-        GD.Print($"[AutoPilot] click {viewportPosition}");
-    }
-
-    private CharacterDef PickCharacter()
-    {
-        if (_args.TryGetValue("char", out var id))
+        var affordable = new List<SkillNodeCard>();
+        foreach (var card in tree.Cards)
         {
-            return Characters.ById(id);
+            if (IdleManager.Instance.CanBuySkill(card.Node)) affordable.Add(card);
         }
-        return Characters.All[_rng.RandiRange(0, Characters.All.Count - 1)];
+        if (affordable.Count > 0)
+        {
+            tree.Buy(affordable[_rng.RandiRange(0, affordable.Count - 1)]);
+        }
+    }
+
+    private void Log(string tag)
+    {
+        var idle = IdleManager.Instance;
+        GD.Print($"[AutoPilot] {tag} t={_gameTime / 60.0:0.0}min coins={Big.Format(idle.Coins)} income={Big.Format(idle.IncomePerSecond)}/s " +
+                 $"run={Big.Format(idle.RunEarned)} balls={string.Join("/", idle.BallsOwned)} upg={string.Join("/", idle.UpgradeLevels)} " +
+                 $"jetons={idle.Jetons}/{idle.JetonsEarnedTotal} shoe={idle.ShoeId} unlocked={idle.UnlockedShoes}");
     }
 
     private void Screenshot()
     {
         var image = GetViewport().GetTexture().GetImage();
-        string path = $"{_shotDir}/shot_{_shotIndex++:000}_{_lastState}.png";
-        image.SavePng(path);
-    }
-
-    private void Finish(string reason)
-    {
-        GD.Print($"[AutoPilot] finished ({reason}) after {_time:0.0}s");
-        foreach (var s in _summaries)
-        {
-            GD.Print($"[AutoPilot] SUMMARY {s}");
-        }
-        if (_shotDir != null)
-        {
-            Screenshot();
-        }
-        GetTree().Quit();
+        image.SavePng($"{_shotDir}/shot_{_shotIndex++:000}.png");
     }
 }

@@ -2,6 +2,13 @@ using Godot;
 
 namespace Plinko;
 
+public enum UpgradeIcon
+{
+    Rows, SmallBall, BigBall, Multiplier, MultiplierDown, TwinBall, ExtraBalls, FewerBalls, Blocker,
+    Shield, ShieldBroken, GoldBall, Peg, Xp, Chest, Star, Cocktail, NarrowSlots, Skull, Portal,
+    Reroll, Cards, Heart, Gear, Clock,
+}
+
 // Simple vector pictograms for upgrade cards — no font glyph or texture dependency.
 public static class UpgradeIcons
 {
@@ -193,6 +200,25 @@ public static class UpgradeIcons
                 ci.DrawCircle(c + new Vector2(-r * 0.18f, -r * 0.14f), r * 0.1f, white);
                 break;
             }
+
+            case UpgradeIcon.Gear:
+                for (int i = 0; i < 8; i++)
+                {
+                    float a = i * Mathf.Tau / 8f;
+                    var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                    ci.DrawLine(c + d * r * 0.3f, c + d * r * 0.62f, white, r * 0.18f);
+                }
+                ci.DrawCircle(c, r * 0.42f, white);
+                ci.DrawCircle(c, r * 0.18f, dark);
+                ci.DrawCircle(c + new Vector2(r * 0.55f, r * 0.5f), r * 0.14f, light);
+                break;
+
+            case UpgradeIcon.Clock:
+                ci.DrawArc(c, r * 0.58f, 0f, Mathf.Tau, 40, white, r * 0.1f, true);
+                ci.DrawLine(c, c + new Vector2(0f, -r * 0.4f), white, r * 0.09f);
+                ci.DrawLine(c, c + new Vector2(r * 0.3f, 0f), light, r * 0.09f);
+                ci.DrawCircle(c, r * 0.07f, white);
+                break;
 
             case UpgradeIcon.Skull:
                 ci.DrawCircle(c + new Vector2(0f, -r * 0.1f), r * 0.45f, white);

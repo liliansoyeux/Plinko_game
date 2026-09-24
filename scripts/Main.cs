@@ -4,7 +4,7 @@ using System;
 namespace Plinko;
 
 // Root of the game: owns the post-processing environment (HDR glow), the fade layer and
-// the current screen (title or a run), and swaps between them.
+// the current screen (title or the game), and swaps between them.
 public partial class Main : Node2D
 {
     public static Main Instance { get; private set; }
@@ -14,9 +14,8 @@ public partial class Main : Node2D
     private bool _transitioning;
     private Tween _fadeTween;
 
-    public TitleScreen Title => _screen as TitleScreen;
-    public GameScreen Game => _screen as GameScreen;
-    public SkillTreeScreen Skills => _screen as SkillTreeScreen;
+    public IdleTitleScreen Title => _screen as IdleTitleScreen;
+    public IdleGameScreen Game => _screen as IdleGameScreen;
     public bool IsTransitioning => _transitioning;
 
     public override void _Ready()
@@ -39,7 +38,7 @@ public partial class Main : Node2D
         _fade.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         fadeLayer.AddChild(_fade);
 
-        SwapTo(new TitleScreen());
+        SwapTo(new IdleTitleScreen());
         FadeFromBlack(0.6f);
 
         if (Array.Exists(OS.GetCmdlineUserArgs(), a => a.StartsWith("--autopilot")))
@@ -52,7 +51,7 @@ public partial class Main : Node2D
     {
         if (what == NotificationWMCloseRequest)
         {
-            RunManager.Instance?.AbandonRun();
+            IdleManager.Instance?.Save();
         }
     }
 
@@ -80,11 +79,10 @@ public partial class Main : Node2D
         return env;
     }
 
-    public void ShowTitle() => TransitionTo(() => new TitleScreen());
+    public void ShowTitle() => TransitionTo(() => new IdleTitleScreen());
 
-    public void ShowSkillTree() => TransitionTo(() => new SkillTreeScreen());
-
-    public void StartGame(CharacterDef character) => TransitionTo(() => new GameScreen { Character = character });
+    public void StartGame(string welcomeTitle = null, string welcomeText = null) =>
+        TransitionTo(() => new IdleGameScreen { WelcomeTitle = welcomeTitle, WelcomeText = welcomeText });
 
     private void TransitionTo(Func<Node> factory)
     {
@@ -111,9 +109,6 @@ public partial class Main : Node2D
     {
         if (_screen != null)
         {
-            // Abandon first: removing the screen frees its balls, and a ball leaving the tree
-            // must not be able to end (and record) the run that's being thrown away.
-            RunManager.Instance.AbandonRun();
             RemoveChild(_screen);
             _screen.QueueFree();
         }

@@ -10,12 +10,23 @@ public enum PlaceableKind
     Portal,
 }
 
+// What a board must expose for interactive placement.
+public interface IPlacementBoard
+{
+    float Spacing { get; }
+    float Unit { get; }
+    Vector2 InstructionAnchor { get; }
+    Vector2 CellCenter(Vector2I cell);
+    List<Vector2I> FreeCellsFor(PlaceableKind kind);
+    void CommitPlacement(PlaceableKind kind, Vector2I cell, float rotation);
+}
+
 // Interactive placement of a bonus blocker or portal. The game is paused meanwhile, so this
 // node processes Always: a ghost follows the mouse, snapped to free gaps between pegs.
 // Wheel / right-click / R rotate a blocker, left-click / Enter confirm.
 public partial class PlacementTool : Node2D
 {
-    public PlinkoBoard Board;
+    public IPlacementBoard Board;
     public PlaceableKind Kind;
     public event Action Placed;
 

@@ -63,6 +63,10 @@ public static class Pal
 
     public static string FormatMultiplier(float value)
     {
+        if (value >= 1000f)
+        {
+            return "x" + Big.Format(value);
+        }
         if (value >= 10f || Mathf.IsEqualApprox(value, Mathf.Round(value)))
         {
             return $"x{Mathf.RoundToInt(value)}";

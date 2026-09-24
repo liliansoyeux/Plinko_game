@@ -37,7 +37,7 @@ public partial class Sfx : Node
     private readonly Dictionary<Sound, AudioStreamWav> _streams = new();
     private readonly List<AudioStreamPlayer> _players = new();
     private int _next;
-    private ulong _lastPegMs;
+    private readonly Dictionary<int, ulong> _lastPlayedMs = new();
     private readonly Random _noise = new(1234);
     private AudioStreamPlayer _music;
 
@@ -76,15 +76,17 @@ public partial class Sfx : Node
             return;
         }
 
-        if (sound == Sound.Peg)
+        if (sound is Sound.Peg or Sound.Slot or Sound.Portal)
         {
-            // Many balls hitting many pegs would otherwise turn into white noise.
+            // Dozens of balls at once would otherwise turn into white noise.
             ulong now = Time.GetTicksMsec();
-            if (now - _instance._lastPegMs < 28)
+            int index = (int)sound;
+            ulong gap = sound == Sound.Peg ? 28UL : 45UL;
+            if (now - _instance._lastPlayedMs.GetValueOrDefault(index) < gap)
             {
                 return;
             }
-            _instance._lastPegMs = now;
+            _instance._lastPlayedMs[index] = now;
         }
 
         var player = _instance._players[_instance._next];
