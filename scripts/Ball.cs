@@ -11,9 +11,8 @@ public partial class Ball : RigidBody2D
 
     public float Radius = 9f;
     public int Tier;
-    public double Stack = 1.0;     // how many owned balls this physical ball stands for
-    public int TokenIndex = -1;    // reserve slot it returns to; -1 for portal twins
-    public bool IsTwin => TokenIndex < 0;
+    public double Stack = 1.0;     // how many balls this physical ball carries (bundled drops)
+    public bool IsTwin;            // free duplicate made by a portal
     public readonly HashSet<int> PortalsUsed = new();
 
     private const double StuckThresholdSeconds = 0.4;
@@ -171,7 +170,7 @@ public partial class Ball : RigidBody2D
 
     public override void _ExitTree()
     {
-        // Fires however the ball was removed, so its reserve token always comes back.
+        // Fires however the ball was removed (slot, floor, safety despawn).
         Removed?.Invoke(this);
     }
 }

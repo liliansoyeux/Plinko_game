@@ -4,10 +4,10 @@ using System.Collections.Generic;
 
 namespace Plinko;
 
-// The incremental Plinko board. Every owned ball lives in a reserve of "tokens": a token
-// drops (by click or by the auto-dropper), lands, then recharges before it can drop again.
-// To keep physics cheap, each tier has at most TokenCap tokens; beyond that, each physical
-// ball stands for several owned balls (its Stack) and pays accordingly.
+// The incremental Plinko board. Balls are consumables taken from IdleManager's stock: each
+// drop (click or auto-dropper) spends one, it lands, pays out and is destroyed. To keep
+// physics cheap at high cadence, one physical ball can carry a bundle of balls (its Stack)
+// and pays for all of them.
 public partial class IdleBoard : Node2D, IPlacementBoard
 {
     public Rect2 Area = new(0f, 0f, 800f, 616f);
@@ -20,9 +20,8 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private const float MaxSpacing = 58f;
     private const float RowRatio = 0.9f;
     private const float BaseSpacing = 48f;
-    public const int TokenCap = 24;
     private const int MaxBallsInFlight = 170;
-    private const double MaxAutoDropsPerSecond = 40.0;
+    private const double MaxPhysicalDropsPerSecond = 24.0;
     private const double GoldenChestLifetime = 20.0;
 
     private Node2D _pegs;
@@ -34,8 +33,6 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private readonly List<Slot> _slotList = new();
     private readonly HashSet<Vector2I> _occupied = new();
 
-    private readonly List<double>[] _tokens = new List<double>[BallTiers.All.Length];
-    private double _clock;
     private double _autoDropBudget;
     private int _inFlight;
 
@@ -53,6 +50,9 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private double _goldenChestTimer;
     private double _goldenChestAge;
 
+    // Debug/balancing: how many balls landed in each slot of the current layout.
+    public int[] LandingCounts { get; private set; } = new int[32];
+
     public float Unit => _s / BaseSpacing;
     public float Spacing => _s;
     public bool LauncherActive { get; set; } = true;
@@ -65,36 +65,26 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private float FloorY => SlotTop + SlotHeight + _s * 0.25f;
     private float WallLeft => _cx - SlotCount * _s / 2f;
     private float WallRight => _cx + SlotCount * _s / 2f;
-    private float AimMin => _cx - _s * 1.6f;
-    private float AimMax => _cx + _s * 1.6f;
+    // You aim between the outer pegs of the first row, not at the edges.
+    private float AimMin => _cx - _s * 0.9f;
+    private float AimMax => _cx + _s * 0.9f;
+
+    // Angled rails hug the peg pyramid, 0.62 spacing outside its outermost pegs: just wide
+    // enough for a ball to pass, so it can never fall outside the pyramid and slide down a
+    // side wall straight into an edge slot. Reaching an edge takes going "outward" at every
+    // single row (about 1 in 2^rows).
+    private const float RailOffset = 0.62f;
+    private float RailHalfWidthAt(float y) => (1f + RailOffset + 0.5f * Mathf.Max(0f, (y - _top) / _sy)) * _s;
     public float AimRangeMin => AimMin;
     public float AimRangeMax => AimMax;
     public Vector2 LauncherPosition => new(_aimX, LauncherY);
     public Vector2 InstructionAnchor => new(_cx, LauncherY - _s * 0.15f);
 
-    public int ReadyTokens
-    {
-        get
-        {
-            int ready = 0;
-            foreach (var list in _tokens)
-            {
-                foreach (double t in list)
-                {
-                    if (t <= _clock) ready++;
-                }
-            }
-            return ready;
-        }
-    }
+    // Balls carried by each auto-dropped physical ball.
+    public double Bundle => Math.Max(1.0, Math.Ceiling(IdleManager.Instance.Cadence / MaxPhysicalDropsPerSecond));
 
     public override void _Ready()
     {
-        for (int i = 0; i < _tokens.Length; i++)
-        {
-            _tokens[i] = new List<double>();
-        }
-
         _walls = new Node2D();
         _slots = new Node2D();
         _pegs = new Node2D();
@@ -195,6 +185,30 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             _walls.AddChild(post);
         }
 
+        // Pyramid rails: one convex block per side filling everything outside the rail.
+        float blockTop = Area.Position.Y - 400f;
+        float railBottom = RailHalfWidthAt(SlotTop);
+        foreach (float side in new[] { -1f, 1f })
+        {
+            var points = new[]
+            {
+                new Vector2(_cx + side * RailHalfWidthAt(_top), blockTop),
+                new Vector2(_cx + side * RailHalfWidthAt(_top), _top),
+                new Vector2(_cx + side * railBottom, SlotTop),
+                new Vector2(_cx + side * (SlotCount * _s / 2f + 40f), SlotTop),
+                new Vector2(_cx + side * (SlotCount * _s / 2f + 40f), blockTop),
+            };
+            if (side > 0f) System.Array.Reverse(points);
+            var rail = new StaticBody2D
+            {
+                CollisionLayer = PhysicsLayers.Board,
+                CollisionMask = 0,
+                PhysicsMaterialOverride = new PhysicsMaterial { Bounce = 0.25f, Friction = 0.05f },
+            };
+            rail.AddChild(new CollisionShape2D { Shape = new ConvexPolygonShape2D { Points = points } });
+            _walls.AddChild(rail);
+        }
+
         var floor = new Area2D { Position = new Vector2(_cx, FloorY), CollisionLayer = 0, CollisionMask = PhysicsLayers.Ball, Monitorable = false };
         floor.AddChild(new CollisionShape2D { Shape = new RectangleShape2D { Size = new Vector2(WallRight - WallLeft + 40f, 30f) } });
         floor.BodyEntered += body => (body as Ball)?.Settle();
@@ -227,6 +241,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             return;
         }
         slot.Pulse();
+        LandingCounts[_slotList.IndexOf(slot)]++;
         var (payout, crit) = IdleManager.Instance.Land(ball.Tier, ball.Stack, slot.Multiplier);
         Landed?.Invoke(slot, ball, payout, crit);
         ball.Settle();
@@ -302,57 +317,33 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         Callable.From(() =>
         {
             if (!IsInstanceValid(this) || !IsInsideTree()) return;
-            var twin = Spawn(tier, stack, -1, origin + new Vector2(radius * 0.6f, 0f), new Vector2(side, velocity.Y));
+            var twin = Spawn(tier, stack, true, origin + new Vector2(radius * 0.6f, 0f), new Vector2(side, velocity.Y));
             twin.PortalsUsed.UnionWith(used);
             BallDuplicated?.Invoke(ToGlobal(origin));
         }).CallDeferred();
     }
 
-    // ---------------------------------------------------------------- tokens & dropping
+    // ---------------------------------------------------------------- dropping
 
-    private void SyncTokens()
-    {
-        var owned = IdleManager.Instance.BallsOwned;
-        for (int t = 0; t < _tokens.Length; t++)
-        {
-            int wanted = Math.Min(owned[t], TokenCap);
-            while (_tokens[t].Count < wanted)
-            {
-                _tokens[t].Add(_clock);
-            }
-        }
-    }
-
-    private double StackFor(int tier) =>
-        Math.Max(1.0, IdleManager.Instance.BallsOwned[tier] / (double)Math.Max(1, _tokens[tier].Count));
-
-    private bool DropNext(float x)
+    private bool DropNext(float x, double count)
     {
         if (_inFlight >= MaxBallsInFlight)
         {
             return false;
         }
-        // Highest tier first: when you click, you want your best ball.
-        for (int t = _tokens.Length - 1; t >= 0; t--)
+        var (tier, taken) = IdleManager.Instance.TakeForDrop(count);
+        if (tier < 0)
         {
-            var list = _tokens[t];
-            for (int i = 0; i < list.Count; i++)
-            {
-                if (list[i] <= _clock)
-                {
-                    list[i] = double.MaxValue;
-                    Spawn(t, StackFor(t), i, new Vector2(x, LauncherY + _s * 0.2f), new Vector2((float)GD.RandRange(-12.0, 12.0), 40f));
-                    _launcherPulse = 1f;
-                    return true;
-                }
-            }
+            return false;
         }
-        return false;
+        Spawn(tier, taken, false, new Vector2(x, LauncherY + _s * 0.2f), new Vector2((float)GD.RandRange(-12.0, 12.0), 40f));
+        _launcherPulse = 1f;
+        return true;
     }
 
     public bool ManualDrop()
     {
-        bool dropped = DropNext(_aimX + (float)GD.RandRange(-0.06, 0.06) * _s);
+        bool dropped = DropNext(_aimX + (float)GD.RandRange(-0.06, 0.06) * _s, 1);
         if (dropped)
         {
             Sfx.Play(Sound.Drop, 0.9f + GD.Randf() * 0.2f, -6f);
@@ -360,7 +351,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         return dropped;
     }
 
-    private Ball Spawn(int tier, double stack, int token, Vector2 position, Vector2 velocity)
+    private Ball Spawn(int tier, double stack, bool twin, Vector2 position, Vector2 velocity)
     {
         float radius = 9f * Unit * (1f + 0.04f * tier);
         position.X = Mathf.Clamp(position.X, WallLeft + radius + 2f, WallRight - radius - 2f);
@@ -369,7 +360,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             Radius = radius,
             Tier = tier,
             Stack = stack,
-            TokenIndex = token,
+            IsTwin = twin,
             Position = position,
             LinearVelocity = velocity,
         };
@@ -382,14 +373,8 @@ public partial class IdleBoard : Node2D, IPlacementBoard
 
     private void OnBallPegHit(Ball ball) => IdleManager.Instance.PegHit(ball.Tier, ball.Stack);
 
-    private void OnBallRemoved(Ball ball)
-    {
-        _inFlight = Math.Max(0, _inFlight - 1);
-        if (!ball.IsTwin && ball.TokenIndex < _tokens[ball.Tier].Count)
-        {
-            _tokens[ball.Tier][ball.TokenIndex] = _clock + IdleManager.Instance.RechargeSeconds;
-        }
-    }
+    // The ball is spent: nothing goes back to the stock.
+    private void OnBallRemoved(Ball ball) => _inFlight = Math.Max(0, _inFlight - 1);
 
     public void AimAtGlobal(Vector2 global) => _aimTargetX = Mathf.Clamp(ToLocal(global).X, AimMin, AimMax);
     public void AimAtLocalX(float x) => _aimTargetX = Mathf.Clamp(x, AimMin, AimMax);
@@ -447,19 +432,23 @@ public partial class IdleBoard : Node2D, IPlacementBoard
 
     public override void _Process(double delta)
     {
-        _clock += delta;
         _time += (float)delta;
-        SyncTokens();
 
-        if (IdleManager.Instance.HasAutoDropper && LauncherActive)
+        var idle = IdleManager.Instance;
+        if (idle.HasAutoDropper && LauncherActive)
         {
-            _autoDropBudget = Math.Min(4.0, _autoDropBudget + delta * MaxAutoDropsPerSecond);
-            while (_autoDropBudget >= 1.0)
+            double bundle = Bundle;
+            _autoDropBudget = Math.Min(bundle * 4, _autoDropBudget + delta * idle.Cadence);
+            while (_autoDropBudget >= bundle)
             {
-                // Auto drops scatter around the aimed spot.
-                float x = _aimX + (float)GD.RandRange(-0.35, 0.35) * _s;
-                if (!DropNext(x)) break;
-                _autoDropBudget -= 1.0;
+                // Auto drops scatter a little around the aimed spot.
+                float x = _aimX + (float)GD.RandRange(-0.3, 0.3) * _s;
+                if (!DropNext(x, bundle))
+                {
+                    _autoDropBudget = Math.Min(_autoDropBudget, bundle);
+                    break;
+                }
+                _autoDropBudget -= bundle;
             }
         }
 
@@ -471,8 +460,25 @@ public partial class IdleBoard : Node2D, IPlacementBoard
 
     public override void _Draw()
     {
-        var field = new Rect2(WallLeft, LauncherY - _s * 0.5f, WallRight - WallLeft, FloorY - LauncherY + _s * 0.5f);
-        Paint.VerticalGradient(this, field, new Color(0.07f, 0.03f, 0.1f, 0.85f), new Color(0.03f, 0.01f, 0.06f, 0.92f));
+        float railTop = LauncherY - _s * 0.5f;
+        float topHalf = RailHalfWidthAt(_top);
+        float bottomHalf = RailHalfWidthAt(SlotTop);
+        var outline = new[]
+        {
+            new Vector2(_cx - topHalf, railTop), new Vector2(_cx + topHalf, railTop),
+            new Vector2(_cx + topHalf, _top), new Vector2(_cx + bottomHalf, SlotTop),
+            new Vector2(WallRight, SlotTop), new Vector2(WallRight, FloorY),
+            new Vector2(WallLeft, FloorY), new Vector2(WallLeft, SlotTop),
+            new Vector2(_cx - bottomHalf, SlotTop), new Vector2(_cx - topHalf, _top),
+        };
+        var fieldTop = new Color(0.07f, 0.03f, 0.1f, 0.88f);
+        var fieldBottom = new Color(0.03f, 0.01f, 0.06f, 0.95f);
+        var fieldColors = new Color[outline.Length];
+        for (int i = 0; i < outline.Length; i++)
+        {
+            fieldColors[i] = fieldTop.Lerp(fieldBottom, Mathf.Clamp((outline[i].Y - railTop) / (FloorY - railTop), 0f, 1f));
+        }
+        DrawPolygon(outline, fieldColors);
 
         var (firstStart, firstEnd) = RowRange(0);
         var (lastStart, lastEnd) = RowRange(_rows - 1);
@@ -484,11 +490,16 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             new Vector2(lastEnd + _s, LastRowY + _s * 0.4f), new Vector2(lastStart - _s, LastRowY + _s * 0.4f),
         }, new[] { glowTop, glowTop, glowBottom, glowBottom });
 
-        float railTop = LauncherY - _s * 0.5f;
-        foreach (float x in new[] { WallLeft, WallRight })
+        foreach (float side in new[] { -1f, 1f })
         {
-            DrawLine(new Vector2(x, railTop), new Vector2(x, FloorY), Pal.Alpha(Pal.Pink, 0.25f), 8f);
-            DrawLine(new Vector2(x, railTop), new Vector2(x, FloorY), Pal.Hdr(Pal.Pink, 1.8f), 2.5f);
+            var rail = new[]
+            {
+                new Vector2(_cx + side * topHalf, railTop), new Vector2(_cx + side * topHalf, _top),
+                new Vector2(_cx + side * bottomHalf, SlotTop), new Vector2(_cx + side * SlotCount * _s / 2f, SlotTop),
+                new Vector2(_cx + side * SlotCount * _s / 2f, FloorY),
+            };
+            DrawPolyline(rail, Pal.Alpha(Pal.Pink, 0.25f), 8f, true);
+            DrawPolyline(rail, Pal.Hdr(Pal.Pink, 1.8f), 2.5f, true);
         }
 
         // Launcher rail + nozzle.
@@ -498,7 +509,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         {
             return;
         }
-        bool ready = ReadyTokens > 0;
+        bool ready = IdleManager.Instance.TotalStock >= 1;
         var color = ready ? Pal.Cyan : new Color(0.4f, 0.38f, 0.45f);
         float pulse = 0.5f + 0.5f * Mathf.Sin(_time * 5f);
         if (ready)

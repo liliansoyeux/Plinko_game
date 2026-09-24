@@ -27,7 +27,7 @@ public class CharacterDef
     // Difficulty
     public double CostMultiplier = 1.0;
     public double SlotMultiplier = 1.0;
-    public double RechargeMultiplier = 1.0;
+    public double CadenceMultiplier = 1.0;
     public double JetonMultiplier = 1.0;
     public double UnlockRunEarnings;   // earned in a single run with the previous pair
 
@@ -38,7 +38,7 @@ public class CharacterDef
             var parts = new List<string>();
             if (CostMultiplier > 1.0) parts.Add($"Prix x{CostMultiplier:0.#}");
             if (SlotMultiplier < 1.0) parts.Add($"Cases x{SlotMultiplier:0.#}");
-            if (RechargeMultiplier > 1.0) parts.Add($"Recharge x{RechargeMultiplier:0.#}");
+            if (CadenceMultiplier < 1.0) parts.Add($"Cadence x{CadenceMultiplier:0.#}");
             return parts.Count == 0 ? "Aucune contrainte" : string.Join(" · ", parts).Replace(',', '.');
         }
     }
@@ -93,7 +93,7 @@ public static class Characters
         PantsColor = new Color(0.18f, 0.28f, 0.48f),
         CostMultiplier = 3.0,
         SlotMultiplier = 0.6,
-        RechargeMultiplier = 2.0,
+        CadenceMultiplier = 0.5,
         JetonMultiplier = 20.0,
         UnlockRunEarnings = 1e11,
     };
@@ -108,7 +108,7 @@ public static class Characters
         PantsColor = new Color(0.95f, 0.45f, 0.3f),
         CostMultiplier = 4.0,
         SlotMultiplier = 0.5,
-        RechargeMultiplier = 2.5,
+        CadenceMultiplier = 0.4,
         JetonMultiplier = 60.0,
         UnlockRunEarnings = 1e13,
     };

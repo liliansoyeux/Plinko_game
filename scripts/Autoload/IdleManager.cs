@@ -17,15 +17,18 @@ public partial class IdleManager : Node
     public event Action<string, string, Color> Announce;
     public event Action<AchievementDef> AchievementUnlocked;
 
-    public const int StartingBalls = 3;
+    public const int StartingBalls = 25;
+    public const double StartingCoins = 10;
     private const double AutosaveSeconds = 15.0;
-    private const double BaseRecharge = 2.0;
+    private const double BaseCadence = 1.0;   // balls per second from the dropper
     private const double JetonScale = 1e6;
 
     // ---- current run
     public double Coins { get; private set; }
     public double RunEarned { get; private set; }
-    public int[] BallsOwned { get; private set; } = new int[BallTiers.All.Length];
+    // Consumable stock: a ball is spent when it drops and destroyed when it lands.
+    public double[] Stock { get; private set; } = new double[BallTiers.All.Length];
+    public int TiersUnlocked { get; private set; } = 1;
     public int[] UpgradeLevels { get; private set; } = new int[Upgrades.All.Length];
     public List<Vector2I> PortalCells { get; } = new();
     public int PendingPortals { get; private set; }
@@ -40,7 +43,9 @@ public partial class IdleManager : Node
     private readonly Dictionary<string, int> _skills = new();
     private readonly HashSet<string> _achievements = new();
     private double _achievementTimer;
-    public bool AutoBuyBalls { get; set; } = true;
+    private double _rescueTimer;
+    public bool AutoBuyBalls { get; set; } = true;    // auto-restock toggle
+    public double LifetimeBallsDropped { get; private set; }
     public bool AutoBuyUpgrades { get; set; } = true;
 
     // ---- transient
@@ -84,10 +89,13 @@ public partial class IdleManager : Node
 
     public int Rows => Upgrades.BaseRows + Level(IdleUpgrade.Rows);
     public bool HasAutoDropper => Level(IdleUpgrade.AutoDropper) > 0;
-    public int TotalBalls { get { int t = 0; foreach (int b in BallsOwned) t += b; return t; } }
+    public bool HasAutoRestock => Level(IdleUpgrade.AutoRestock) > 0;
+    public double TotalStock { get { double t = 0; foreach (double b in Stock) t += b; return t; } }
 
-    public double RechargeSeconds => Math.Max(0.08,
-        BaseRecharge * Math.Pow(0.85, Level(IdleUpgrade.Recharge)) * (1.0 - 0.1 * SkillLevel("a_auto")) * Shoe.RechargeMultiplier);
+    // Balls per second released by the auto-dropper.
+    public double Cadence => HasAutoDropper
+        ? BaseCadence * Math.Pow(1.4, Level(IdleUpgrade.Cadence)) * (1.0 + 0.15 * SkillLevel("a_auto")) * Shoe.CadenceMultiplier
+        : 0.0;
 
     public double CritChance => Math.Min(0.6, 0.03 * Level(IdleUpgrade.Critical));
     public double CritMultiplier => 10 + 5 * SkillLevel("f_crit");
@@ -113,12 +121,15 @@ public partial class IdleManager : Node
     {
         int n = rows + 3;
         double c = (n - 1) / 2.0;
+        // The middle pays less than a ball costs (x0.7): aiming off-centre is what turns a
+        // profit, and the edges are the jackpots.
+        const double centre = 0.7;
         double edgeMax = 25.0 * Math.Pow(rows / 8.0, 2.0);
         var result = new double[n];
         for (int i = 0; i < n; i++)
         {
             double d = Math.Abs(i - c) / c;
-            double m = Math.Pow(edgeMax, d * d);
+            double m = centre * Math.Pow(edgeMax / centre, d * d);
             result[i] = m < 10 ? Math.Round(m * 10) / 10 : Math.Round(m);
         }
         return result;
@@ -138,32 +149,52 @@ public partial class IdleManager : Node
 
     // ================================================================ costs & purchases
 
-    public double BallCost(int tier, int amount)
-    {
-        var def = BallTiers.All[tier];
-        double g = def.CostGrowth;
-        double first = def.BaseCost * CostMultiplier * Math.Pow(g, BallsOwned[tier]);
-        return first * (Math.Pow(g, amount) - 1) / (g - 1);
-    }
+    public double BallPrice(int tier) =>
+        BallTiers.All[tier].Price * CostMultiplier * (1.0 - 0.1 * SkillLevel("a_balls"));
 
-    public int MaxAffordableBalls(int tier)
-    {
-        var def = BallTiers.All[tier];
-        double g = def.CostGrowth;
-        double first = def.BaseCost * CostMultiplier * Math.Pow(g, BallsOwned[tier]);
-        if (Coins < first) return 0;
-        return (int)Math.Floor(Math.Log(Coins * (g - 1) / first + 1) / Math.Log(g));
-    }
+    public double MaxAffordableBalls(int tier) => Math.Floor(Coins / BallPrice(tier));
 
-    public bool BuyBalls(int tier, int amount)
+    public bool BuyBalls(int tier, double amount)
     {
-        if (amount <= 0) return false;
-        double cost = BallCost(tier, amount);
+        amount = Math.Floor(amount);
+        if (amount <= 0 || tier >= TiersUnlocked) return false;
+        double cost = BallPrice(tier) * amount;
         if (cost > Coins) return false;
         Coins -= cost;
-        BallsOwned[tier] += amount;
+        Stock[tier] += amount;
+        // Income is shown net of ball purchases: that's the real profit of the machine.
+        _buckets[_bucket] -= cost;
         Changed?.Invoke();
         return true;
+    }
+
+    public double TierUnlockCost(int tier) => BallTiers.All[tier].UnlockCost * CostMultiplier;
+
+    public bool UnlockTier(int tier)
+    {
+        if (tier != TiersUnlocked || tier >= BallTiers.All.Length) return false;
+        double cost = TierUnlockCost(tier);
+        if (cost > Coins) return false;
+        Coins -= cost;
+        TiersUnlocked++;
+        Changed?.Invoke();
+        return true;
+    }
+
+    // Takes up to `count` balls of the best tier in stock for one drop.
+    public (int tier, double taken) TakeForDrop(double count)
+    {
+        for (int t = TiersUnlocked - 1; t >= 0; t--)
+        {
+            if (Stock[t] >= 1)
+            {
+                double taken = Math.Min(Math.Floor(Stock[t]), Math.Max(1, Math.Floor(count)));
+                Stock[t] -= taken;
+                LifetimeBallsDropped += taken;
+                return (t, taken);
+            }
+        }
+        return (-1, 0);
     }
 
     public bool IsMaxed(IdleUpgrade id) => Level(id) >= Upgrades.Get(id).MaxLevel;
@@ -299,15 +330,17 @@ public partial class IdleManager : Node
 
     private void ResetRun()
     {
-        int[] startCoins = { 0, 500, 50_000, 5_000_000 };
+        double[] startCoins = { StartingCoins, 500, 50_000, 5_000_000 };
         Coins = startCoins[Math.Min(3, SkillLevel("e_start"))];
         RunEarned = 0;
-        BallsOwned = new int[BallTiers.All.Length];
-        BallsOwned[0] = StartingBalls;
+        Stock = new double[BallTiers.All.Length];
+        Stock[0] = StartingBalls;
+        TiersUnlocked = 1;
         UpgradeLevels = new int[Upgrades.All.Length];
         if (SkillLevel("a_auto") > 0)
         {
             UpgradeLevels[(int)IdleUpgrade.AutoDropper] = 1;
+            UpgradeLevels[(int)IdleUpgrade.AutoRestock] = 1;
         }
         PortalCells.Clear();
         PendingPortals = SkillLevel("e_portal") > 0 ? 1 : 0;
@@ -338,9 +371,10 @@ public partial class IdleManager : Node
         if (!CanBuySkill(node)) return false;
         Jetons -= SkillCost(node);
         _skills[node.Id] = SkillLevel(node.Id) + 1;
-        if (node.Id == "a_auto" && !HasAutoDropper)
+        if (node.Id == "a_auto")
         {
             UpgradeLevels[(int)IdleUpgrade.AutoDropper] = 1;
+            UpgradeLevels[(int)IdleUpgrade.AutoRestock] = 1;
         }
         if (node.Id == "f_edges")
         {
@@ -397,6 +431,17 @@ public partial class IdleManager : Node
             }
         }
 
+        // Anti soft-lock: broke and out of balls? A free basic ball every second.
+        if (TotalStock < 1 && Coins < BallPrice(0))
+        {
+            _rescueTimer += delta;
+            if (_rescueTimer >= 1.0)
+            {
+                _rescueTimer = 0;
+                Stock[0] += 1;
+            }
+        }
+
         _achievementTimer += delta;
         if (_achievementTimer >= 0.5)
         {
@@ -436,12 +481,9 @@ public partial class IdleManager : Node
     private void AutoBuy()
     {
         bool bought = false;
-        if (SkillLevel("a_balls") > 0 && AutoBuyBalls)
+        if (HasAutoRestock && AutoBuyBalls)
         {
-            for (int i = 0; i < 25 && BuyMostEfficientBall(); i++)
-            {
-                bought = true;
-            }
+            bought |= Restock();
         }
         if (SkillLevel("a_upgrades") > 0 && AutoBuyUpgrades)
         {
@@ -456,23 +498,28 @@ public partial class IdleManager : Node
         }
     }
 
-    // Best value-per-coin tier that's affordable right now.
-    public bool BuyMostEfficientBall()
+    // Keeps about 20 seconds of dropping in stock, buying the best tier it can afford
+    // (falling back to cheaper tiers when the best one is out of reach).
+    public bool Restock()
     {
-        int best = -1;
-        double bestRatio = 0;
-        for (int t = 0; t < BallTiers.All.Length; t++)
+        double target = Math.Max(30, Cadence * 20);
+        if (TotalStock >= target) return false;
+        for (int t = TiersUnlocked - 1; t >= 0; t--)
         {
-            double cost = BallCost(t, 1);
-            if (cost > Coins) continue;
-            double ratio = BallTiers.All[t].Value / cost;
-            if (ratio > bestRatio)
+            // Never spend more than half the bank on stock: upgrades need coins too.
+            double affordable = Math.Floor(Coins * 0.5 / BallPrice(t));
+            double amount = Math.Min(affordable, target - TotalStock);
+            if (amount >= 1 && BuyBalls(t, amount))
             {
-                bestRatio = ratio;
-                best = t;
+                return true;
             }
         }
-        return best >= 0 && BuyBalls(best, 1);
+        // Broke and out of balls: spend whatever is left on basic balls so the game never stalls.
+        if (TotalStock < 1 && Coins >= BallPrice(0))
+        {
+            return BuyBalls(0, MaxAffordableBalls(0));
+        }
+        return false;
     }
 
     public bool BuyCheapestUpgrade()
@@ -499,7 +546,8 @@ public partial class IdleManager : Node
         var f = SaveData.File;
         f.SetValue("run", "coins", Coins);
         f.SetValue("run", "earned", RunEarned);
-        f.SetValue("run", "balls", string.Join(",", BallsOwned));
+        f.SetValue("run", "stock", string.Join(",", Array.ConvertAll(Stock, v => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
+        f.SetValue("run", "tiers", TiersUnlocked);
         f.SetValue("run", "upgrades", string.Join(",", UpgradeLevels));
         var portals = new List<string>();
         foreach (var c in PortalCells) portals.Add($"{c.X}:{c.Y}");
@@ -507,6 +555,7 @@ public partial class IdleManager : Node
         f.SetValue("run", "pending_portals", PendingPortals);
 
         f.SetValue("meta", "lifetime", LifetimeEarned);
+        f.SetValue("meta", "balls_dropped", LifetimeBallsDropped);
         f.SetValue("meta", "jetons", Jetons);
         f.SetValue("meta", "jetons_total", JetonsEarnedTotal);
         f.SetValue("meta", "prestiges", Prestiges);
@@ -544,7 +593,12 @@ public partial class IdleManager : Node
 
         Coins = (double)f.GetValue("run", "coins", 0.0);
         RunEarned = (double)f.GetValue("run", "earned", 0.0);
-        ParseInts((string)f.GetValue("run", "balls", ""), BallsOwned);
+        var stock = ((string)f.GetValue("run", "stock", "")).Split(',', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < Stock.Length && i < stock.Length; i++)
+        {
+            double.TryParse(stock[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out Stock[i]);
+        }
+        TiersUnlocked = Math.Clamp((int)f.GetValue("run", "tiers", 1), 1, BallTiers.All.Length);
         ParseInts((string)f.GetValue("run", "upgrades", ""), UpgradeLevels);
         foreach (var part in ((string)f.GetValue("run", "portals", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -557,6 +611,7 @@ public partial class IdleManager : Node
         PendingPortals = (int)f.GetValue("run", "pending_portals", 0);
 
         LifetimeEarned = (double)f.GetValue("meta", "lifetime", 0.0);
+        LifetimeBallsDropped = (double)f.GetValue("meta", "balls_dropped", 0.0);
         Jetons = (int)f.GetValue("meta", "jetons", 0);
         JetonsEarnedTotal = (int)f.GetValue("meta", "jetons_total", 0);
         Prestiges = (int)f.GetValue("meta", "prestiges", 0);
@@ -599,6 +654,7 @@ public partial class IdleManager : Node
         _skills.Clear();
         _achievements.Clear();
         LifetimeEarned = 0;
+        LifetimeBallsDropped = 0;
         Jetons = 0;
         JetonsEarnedTotal = 0;
         Prestiges = 0;

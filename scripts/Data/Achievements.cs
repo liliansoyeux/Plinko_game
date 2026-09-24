@@ -17,14 +17,14 @@ public static class Achievements
 
     public static readonly AchievementDef[] All =
     {
-        new() { Id = "balls_10", Name = "Poignée de billes", Description = "Posséder 10 billes.", Condition = m => m.TotalBalls >= 10 },
-        new() { Id = "balls_100", Name = "Collectionneur", Description = "Posséder 100 billes.", Condition = m => m.TotalBalls >= 100 },
-        new() { Id = "balls_500", Name = "Avalanche", Description = "Posséder 500 billes.", Condition = m => m.TotalBalls >= 500 },
-        new() { Id = "tier_1", Name = "Argentier", Description = "Acheter une bille d'argent.", Condition = m => m.BallsOwned[1] > 0 },
-        new() { Id = "tier_2", Name = "Chercheur d'or", Description = "Acheter une bille d'or.", Condition = m => m.BallsOwned[2] > 0 },
-        new() { Id = "tier_3", Name = "Diamant brut", Description = "Acheter une bille de diamant.", Condition = m => m.BallsOwned[3] > 0 },
-        new() { Id = "tier_4", Name = "Cœur de rubis", Description = "Acheter une bille de rubis.", Condition = m => m.BallsOwned[4] > 0 },
-        new() { Id = "tier_5", Name = "Voyage cosmique", Description = "Acheter une bille cosmique.", Condition = m => m.BallsOwned[5] > 0 },
+        new() { Id = "balls_100", Name = "Poignée de billes", Description = "Lâcher 100 billes.", Condition = m => m.LifetimeBallsDropped >= 100 },
+        new() { Id = "balls_10k", Name = "Collectionneur", Description = "Lâcher 10 000 billes.", Condition = m => m.LifetimeBallsDropped >= 1e4 },
+        new() { Id = "balls_1m", Name = "Avalanche", Description = "Lâcher 1 million de billes.", Condition = m => m.LifetimeBallsDropped >= 1e6 },
+        new() { Id = "tier_1", Name = "Argentier", Description = "Débloquer les billes d'argent.", Condition = m => m.TiersUnlocked > 1 },
+        new() { Id = "tier_2", Name = "Chercheur d'or", Description = "Débloquer les billes d'or.", Condition = m => m.TiersUnlocked > 2 },
+        new() { Id = "tier_3", Name = "Diamant brut", Description = "Débloquer les billes de diamant.", Condition = m => m.TiersUnlocked > 3 },
+        new() { Id = "tier_4", Name = "Cœur de rubis", Description = "Débloquer les billes de rubis.", Condition = m => m.TiersUnlocked > 4 },
+        new() { Id = "tier_5", Name = "Voyage cosmique", Description = "Débloquer les billes cosmiques.", Condition = m => m.TiersUnlocked > 5 },
         new() { Id = "earn_1m", Name = "Millionnaire", Description = "Gagner 1M en une partie.", Condition = m => m.RunEarned >= 1e6 },
         new() { Id = "earn_1b", Name = "Milliardaire", Description = "Gagner 1B en une partie.", Condition = m => m.RunEarned >= 1e9 },
         new() { Id = "earn_1t", Name = "Hors catégorie", Description = "Gagner 1T en une partie.", Condition = m => m.RunEarned >= 1e12 },

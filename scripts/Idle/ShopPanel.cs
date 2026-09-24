@@ -93,16 +93,8 @@ public partial class ShopPanel : CanvasLayer
         if (_tab == Tab.Shoes && IdleManager.Instance.UnlockedShoes != _unlockedShoesShown) Rebuild();
     }
 
-    private static int VisibleTierCount()
-    {
-        var owned = IdleManager.Instance.BallsOwned;
-        int highest = 0;
-        for (int t = 0; t < owned.Length; t++)
-        {
-            if (owned[t] > 0) highest = t;
-        }
-        return Math.Min(BallTiers.All.Length, highest + 2);
-    }
+    private static int VisibleTierCount() =>
+        Math.Min(BallTiers.All.Length, IdleManager.Instance.TiersUnlocked + 1);
 
     public void SelectTabIndex(int index) => SelectTab((Tab)index);
 
@@ -131,9 +123,10 @@ public partial class ShopPanel : CanvasLayer
         {
             case Tab.Balls:
                 _list.AddChild(BuildAmountBar());
-                if (idle.SkillLevel("a_balls") > 0)
+                _list.AddChild(Note("Chaque bille achetée tombe une seule fois puis disparaît : vise les bords, les cases du centre rapportent moins que le prix d'une bille."));
+                if (idle.HasAutoRestock)
                 {
-                    _list.AddChild(AutoToggle("Achat automatique des billes (Majordome)", idle.AutoBuyBalls, v => idle.AutoBuyBalls = v));
+                    _list.AddChild(AutoToggle("Réapprovisionnement automatique", idle.AutoBuyBalls, v => idle.AutoBuyBalls = v));
                 }
                 _visibleTiers = VisibleTierCount();
                 for (int t = 0; t < _visibleTiers; t++)
@@ -142,7 +135,7 @@ public partial class ShopPanel : CanvasLayer
                 }
                 if (_visibleTiers < BallTiers.All.Length)
                 {
-                    _list.AddChild(Note("Achète une bille du dernier type pour découvrir la suivante."));
+                    _list.AddChild(Note("Débloque un type de bille pour découvrir le suivant."));
                 }
                 break;
 
@@ -342,7 +335,9 @@ public partial class BallRow : ShopRowBase
         QueueRedraw();
     }
 
-    private int Amount()
+    private bool Locked => Tier >= IdleManager.Instance.TiersUnlocked;
+
+    private double Amount()
     {
         var idle = IdleManager.Instance;
         return Panel.BuyAmount < 0 ? Math.Max(1, idle.MaxAffordableBalls(Tier)) : Panel.BuyAmount;
@@ -350,28 +345,31 @@ public partial class BallRow : ShopRowBase
 
     protected override void OnBuy()
     {
-        if (IdleManager.Instance.BuyBalls(Tier, Amount()))
-        {
-            Sfx.Play(Sound.Pick, 0.9f + Tier * 0.08f, -4f);
-        }
-        else
-        {
-            Sfx.Play(Sound.Click, 0.6f);
-        }
+        var idle = IdleManager.Instance;
+        bool ok = Locked ? idle.UnlockTier(Tier) : idle.BuyBalls(Tier, Amount());
+        Sfx.Play(ok ? Sound.Pick : Sound.Click, ok ? 0.9f + Tier * 0.08f : 0.6f, ok ? -4f : 0f);
     }
 
     public override void Refresh()
     {
         var idle = IdleManager.Instance;
         var def = BallTiers.All[Tier];
-        int owned = idle.BallsOwned[Tier];
-        int amount = Amount();
-        double cost = idle.BallCost(Tier, amount);
+        double price = idle.BallPrice(Tier);
         double each = def.Value * idle.GlobalMultiplier;
-        Title.Text = $"{def.Name}  ·  {Big.Format(owned)}";
-        string stack = owned > IdleBoard.TokenCap ? $" (chaque bille en jeu en vaut {owned / (double)IdleBoard.TokenCap:0.#})".Replace(',', '.') : "";
-        Info.Text = $"Vaut {Big.Format(each)} x la case où elle tombe.{stack}";
-        Buy.Text = $"Acheter x{amount}\n{Big.Format(cost)}";
+        if (Locked)
+        {
+            double unlock = idle.TierUnlockCost(Tier);
+            Title.Text = $"{def.Name}  (à débloquer)";
+            Info.Text = $"Vaut {Big.Format(each)} x la case, pour {Big.Format(price)} la bille : bien plus rentable.";
+            Buy.Text = $"Débloquer\n{Big.Format(unlock)}";
+            Buy.Disabled = unlock > idle.Coins;
+            return;
+        }
+        double amount = Amount();
+        double cost = price * amount;
+        Title.Text = $"{def.Name}  ·  stock {Big.Format(idle.Stock[Tier])}";
+        Info.Text = $"Prix {Big.Format(price)}  ·  vaut {Big.Format(each)} x la case où elle tombe (rentable au-dessus de x{Big.Format(price / Math.Max(1e-9, each))}).";
+        Buy.Text = $"Acheter x{Big.Format(amount)}\n{Big.Format(cost)}";
         Buy.Disabled = cost > idle.Coins;
     }
 
@@ -379,10 +377,10 @@ public partial class BallRow : ShopRowBase
     {
         var def = BallTiers.All[Tier];
         var glow = Tier == 5 ? Pal.Prismatic(_time) : def.Glow;
-        Paint.Halo(this, center, 30f, Pal.Alpha(glow, 0.5f));
-        DrawCircle(center, 15f, Pal.Hdr(def.Color, 1.1f));
+        Paint.Halo(this, center, 30f, Pal.Alpha(glow, Locked ? 0.15f : 0.5f));
+        DrawCircle(center, 15f, Locked ? def.Color.Darkened(0.6f) : Pal.Hdr(def.Color, 1.1f));
         DrawCircle(center + new Vector2(0f, 3f), 12f, Pal.Alpha(def.Color.Darkened(0.35f), 0.45f));
-        DrawCircle(center + new Vector2(-5f, -5f), 5f, Pal.Hdr(Colors.White, 1.4f));
+        DrawCircle(center + new Vector2(-5f, -5f), 5f, Locked ? new Color(1f, 1f, 1f, 0.3f) : Pal.Hdr(Colors.White, 1.4f));
     }
 }
 

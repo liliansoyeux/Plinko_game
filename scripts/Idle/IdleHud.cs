@@ -92,16 +92,18 @@ public partial class IdleHudCanvas : Control
         }
 
         // Balls ready / owned.
-        int ready = Board?.ReadyTokens ?? 0;
-        Paint.TextCentered(this, bold, new Vector2(148f, midY - 22f), "BILLES", 14, Pal.Alpha(Pal.Pink, 0.9f));
-        Paint.TextCentered(this, black, new Vector2(148f, midY + 2f), Big.Format(idle.TotalBalls), 34, Pal.Hdr(Pal.Text, 1.1f), 4);
-        Paint.TextCentered(this, bold, new Vector2(148f, midY + 26f), idle.HasAutoDropper ? "distributeur actif" : $"{ready} prête(s)", 12, Pal.TextDim);
+        bool empty = idle.TotalStock < 1;
+        Paint.TextCentered(this, bold, new Vector2(148f, midY - 22f), "STOCK DE BILLES", 14, Pal.Alpha(empty ? Pal.Red : Pal.Pink, 0.9f));
+        Paint.TextCentered(this, black, new Vector2(148f, midY + 2f), Big.Format(idle.TotalStock), 34, Pal.Hdr(empty ? Pal.Red : Pal.Text, 1.1f), 4);
+        string rate = idle.HasAutoDropper ? $"{Big.Format(idle.Cadence)} billes/s" : "clique pour lâcher";
+        Paint.TextCentered(this, bold, new Vector2(148f, midY + 26f), empty ? "achète des billes !" : rate, 12, empty ? Pal.Red : Pal.TextDim);
 
         // Income.
         bool frenzy = idle.FrenzyTimeLeft > 0;
         var incomeColor = frenzy ? Pal.Prismatic(_time) : Pal.Gold;
-        Paint.TextCentered(this, bold, new Vector2(450f, midY - 26f), frenzy ? "REVENUS · FRÉNÉSIE x7" : "REVENUS", 14, Pal.Alpha(incomeColor, 0.95f));
-        Paint.TextCentered(this, black, new Vector2(450f, midY + 2f), $"+{Big.Format(_shownIncome)} /s", 34, Pal.Hdr(incomeColor, 1.25f), 4);
+        if (_shownIncome < 0 && !frenzy) incomeColor = Pal.Red;
+        Paint.TextCentered(this, bold, new Vector2(450f, midY - 26f), frenzy ? "BÉNÉFICE · FRÉNÉSIE x7" : "BÉNÉFICE NET", 14, Pal.Alpha(incomeColor, 0.95f));
+        Paint.TextCentered(this, black, new Vector2(450f, midY + 2f), $"{(_shownIncome >= 0 ? "+" : "")}{Big.Format(_shownIncome)} /s", 34, Pal.Hdr(incomeColor, 1.25f), 4);
         Paint.TextCentered(this, bold, new Vector2(450f, midY + 26f), $"multiplicateur global x{Big.Format(idle.GlobalMultiplier)}", 12, Pal.TextDim);
 
         // Shoes or frenzy timer.

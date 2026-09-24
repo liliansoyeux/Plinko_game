@@ -3,6 +3,8 @@ using System;
 
 namespace Plinko;
 
+// Balls are consumables: each one bought drops once, pays out, and is destroyed. Higher
+// tiers must be unlocked once, then have a better value-to-price margin.
 public class BallTierDef
 {
     public int Index;
@@ -10,33 +12,34 @@ public class BallTierDef
     public Color Color;
     public Color Glow;
     public double Value;       // coins per landing, before slot & multipliers
-    public double BaseCost;
-    public double CostGrowth = 1.15;
+    public double Price;       // price of one ball
+    public double UnlockCost;  // one-time cost to unlock the tier
 }
 
 public static class BallTiers
 {
     public static readonly BallTierDef[] All =
     {
-        new() { Index = 0, Name = "Bille", Color = new Color(0.98f, 0.93f, 1f), Glow = Pal.Pink, Value = 1, BaseCost = 10 },
-        new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 12, BaseCost = 1_200 },
-        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 150, BaseCost = 150_000 },
-        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 2_000, BaseCost = 2e7 },
-        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 30_000, BaseCost = 4e9 },
-        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 500_000, BaseCost = 1e12 },
+        new() { Index = 0, Name = "Bille", Color = new Color(0.98f, 0.93f, 1f), Glow = Pal.Pink, Value = 1, Price = 1, UnlockCost = 0 },
+        new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 12, Price = 10, UnlockCost = 750 },
+        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 150, Price = 100, UnlockCost = 60_000 },
+        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 2_000, Price = 1_000, UnlockCost = 6e6 },
+        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 30_000, Price = 10_000, UnlockCost = 7e8 },
+        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 500_000, Price = 100_000, UnlockCost = 9e10 },
     };
 }
 
 public enum IdleUpgrade
 {
     AutoDropper,
-    Recharge,
+    Cadence,
     Value,
     Rows,
     GoldenPegs,
     Critical,
     Slots,
     Portal,
+    AutoRestock,
 }
 
 public class UpgradeDef
@@ -60,14 +63,14 @@ public static class Upgrades
         new()
         {
             Id = IdleUpgrade.AutoDropper, Name = "Distributeur automatique", Icon = UpgradeIcon.Gear,
-            Describe = _ => "Tes billes retombent toutes seules dès qu'elles sont rechargées.",
-            BaseCost = 40, Growth = 1, MaxLevel = 1,
+            Describe = _ => "Lâche tes billes tout seul, en continu (1 bille par seconde au départ).",
+            BaseCost = 30, Growth = 1, MaxLevel = 1,
         },
         new()
         {
-            Id = IdleUpgrade.Recharge, Name = "Recharge rapide", Icon = UpgradeIcon.Clock,
-            Describe = l => $"Les billes reviennent 15% plus vite (niveau {l + 1}).",
-            BaseCost = 150, Growth = 3.5, MaxLevel = 15,
+            Id = IdleUpgrade.Cadence, Name = "Cadence", Icon = UpgradeIcon.Clock,
+            Describe = l => $"Le distributeur lâche 40% de billes en plus par seconde (niveau {l + 1}).",
+            BaseCost = 60, Growth = 2.6, MaxLevel = 30,
         },
         new()
         {
@@ -104,6 +107,12 @@ public static class Upgrades
             Id = IdleUpgrade.Portal, Name = "Portail dédoubleur", Icon = UpgradeIcon.Portal,
             Describe = l => "Place un portail : chaque bille qui le traverse se dédouble.",
             BaseCost = 2e6, Growth = 150, MaxLevel = 3, AutoBuyable = false,
+        },
+        new()
+        {
+            Id = IdleUpgrade.AutoRestock, Name = "Réapprovisionnement auto", Icon = UpgradeIcon.ExtraBalls,
+            Describe = _ => "Rachète du stock tout seul, avec le meilleur type de bille abordable.",
+            BaseCost = 150, Growth = 1, MaxLevel = 1,
         },
     };
 
@@ -146,9 +155,9 @@ public static class SkillTree
                 Description = "Les cases extrêmes rapportent x3.", Costs = new[] { 200 } },
 
         new() { Id = "a_auto", Branch = SkillBranch.Automation, Tier = 0, Name = "Distributeur offert", Icon = UpgradeIcon.Gear,
-                Description = "Commence avec le distributeur. Recharge -10% par niveau.", Costs = new[] { 2, 6, 12 } },
-        new() { Id = "a_balls", Branch = SkillBranch.Automation, Tier = 1, Name = "Majordome", Icon = UpgradeIcon.ExtraBalls, RequiresId = "a_auto",
-                Description = "Achète automatiquement des billes.", Costs = new[] { 10 } },
+                Description = "Commence avec le distributeur et le réapprovisionnement. Cadence +15% par niveau.", Costs = new[] { 2, 6, 12 } },
+        new() { Id = "a_balls", Branch = SkillBranch.Automation, Tier = 1, Name = "Grossiste", Icon = UpgradeIcon.ExtraBalls, RequiresId = "a_auto",
+                Description = "Les billes coûtent 10% moins cher par niveau.", Costs = new[] { 6, 15, 35 } },
         new() { Id = "a_upgrades", Branch = SkillBranch.Automation, Tier = 2, Name = "Intendant", Icon = UpgradeIcon.Xp, RequiresId = "a_balls",
                 Description = "Achète automatiquement les améliorations.", Costs = new[] { 35 } },
         new() { Id = "a_offline", Branch = SkillBranch.Automation, Tier = 3, Name = "Gains hors-ligne", Icon = UpgradeIcon.Clock, RequiresId = "a_upgrades",

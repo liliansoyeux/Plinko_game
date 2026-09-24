@@ -85,6 +85,11 @@ public partial class AutoPilot : Node
         if (_gameTime > _minutes * 60.0)
         {
             Log("final");
+            var counts = Main.Instance?.Game?.Board?.LandingCounts;
+            if (counts != null)
+            {
+                GD.Print($"[AutoPilot] landings per slot: {string.Join(" ", System.Linq.Enumerable.Take(counts, IdleManager.Instance.Rows + 3))}");
+            }
             GetTree().Quit();
             return;
         }
@@ -149,12 +154,21 @@ public partial class AutoPilot : Node
         if (_buyTimer <= 0)
         {
             _buyTimer = 0.5;
+            // Unlock the next ball tier when it's cheap relative to the bank, then upgrades,
+            // then restock (manual restock until the auto-restock upgrade is bought).
+            if (idle.TiersUnlocked < BallTiers.All.Length && idle.TierUnlockCost(idle.TiersUnlocked) < idle.Coins * 0.6)
+            {
+                idle.UnlockTier(idle.TiersUnlocked);
+            }
             for (int i = 0; i < 6 && idle.BuyCheapestUpgrade(); i++) { }
             if (!idle.IsMaxed(IdleUpgrade.Portal) && idle.UpgradeCost(IdleUpgrade.Portal) < idle.Coins * 0.5)
             {
                 idle.BuyUpgrade(IdleUpgrade.Portal);
             }
-            for (int i = 0; i < 40 && idle.BuyMostEfficientBall(); i++) { }
+            if (!idle.HasAutoRestock)
+            {
+                idle.Restock();
+            }
         }
 
         if (_args.ContainsKey("tabs"))
@@ -219,7 +233,7 @@ public partial class AutoPilot : Node
     {
         var idle = IdleManager.Instance;
         GD.Print($"[AutoPilot] {tag} t={_gameTime / 60.0:0.0}min coins={Big.Format(idle.Coins)} income={Big.Format(idle.IncomePerSecond)}/s " +
-                 $"run={Big.Format(idle.RunEarned)} balls={string.Join("/", idle.BallsOwned)} upg={string.Join("/", idle.UpgradeLevels)} " +
+                 $"run={Big.Format(idle.RunEarned)} stock={Big.Format(idle.TotalStock)} tiers={idle.TiersUnlocked} cadence={idle.Cadence:0.0} upg={string.Join("/", idle.UpgradeLevels)} " +
                  $"jetons={idle.Jetons}/{idle.JetonsEarnedTotal} shoe={idle.ShoeId} unlocked={idle.UnlockedShoes}");
     }
 
