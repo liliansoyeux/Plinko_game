@@ -52,6 +52,9 @@ public class UpgradeDef
     public double Growth;
     public int MaxLevel;
     public bool AutoBuyable = true;
+    // Retired upgrades stay in the enum (save files store levels by index) but are hidden
+    // from the shop and never bought.
+    public bool Retired;
 }
 
 public static class Upgrades
@@ -82,7 +85,7 @@ public static class Upgrades
         {
             Id = IdleUpgrade.Rows, Name = "+1 Rangée", Icon = UpgradeIcon.Rows,
             Describe = l => $"Les billes s'éparpillent plus et les bords rapportent plus ({BaseRows + l + 1} rangées).",
-            BaseCost = 1_000, Growth = 25, MaxLevel = 8,
+            BaseCost = 1_000, Growth = 25, MaxLevel = 8, Retired = true,
         },
         new()
         {

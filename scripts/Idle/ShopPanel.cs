@@ -146,7 +146,10 @@ public partial class ShopPanel : CanvasLayer
                 }
                 foreach (var def in Upgrades.All)
                 {
-                    Add(new UpgradeRow { Def = def });
+                    if (!def.Retired)
+                    {
+                        Add(new UpgradeRow { Def = def });
+                    }
                 }
                 break;
 

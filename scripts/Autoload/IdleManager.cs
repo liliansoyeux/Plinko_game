@@ -92,7 +92,8 @@ public partial class IdleManager : Node
     public int SkillLevel(string id) => _skills.GetValueOrDefault(id);
     public int Level(IdleUpgrade id) => UpgradeLevels[(int)id];
 
-    public int Rows => Upgrades.BaseRows + Level(IdleUpgrade.Rows);
+    // The "+1 Rangée" upgrade is retired: the board always has the base row count.
+    public int Rows => Upgrades.BaseRows;
     public bool HasAutoDropper => Level(IdleUpgrade.AutoDropper) > 0;
     public bool HasAutoRestock => Level(IdleUpgrade.AutoRestock) > 0;
     public double TotalStock { get { double t = 0; foreach (double b in Stock) t += b; return t; } }
@@ -225,7 +226,7 @@ public partial class IdleManager : Node
         return (-1, 0);
     }
 
-    public bool IsMaxed(IdleUpgrade id) => Level(id) >= Upgrades.Get(id).MaxLevel;
+    public bool IsMaxed(IdleUpgrade id) => Upgrades.Get(id).Retired || Level(id) >= Upgrades.Get(id).MaxLevel;
 
     public double UpgradeCost(IdleUpgrade id)
     {

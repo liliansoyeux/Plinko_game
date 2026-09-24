@@ -28,7 +28,6 @@ public static class Achievements
         new() { Id = "earn_1m", Name = "Millionnaire", Description = "Gagner 1M en une partie.", Condition = m => m.RunEarned >= 1e6 },
         new() { Id = "earn_1b", Name = "Milliardaire", Description = "Gagner 1B en une partie.", Condition = m => m.RunEarned >= 1e9 },
         new() { Id = "earn_1t", Name = "Hors catégorie", Description = "Gagner 1T en une partie.", Condition = m => m.RunEarned >= 1e12 },
-        new() { Id = "rows_max", Name = "Plateau géant", Description = "Atteindre 16 rangées.", Condition = m => m.Rows >= 16 },
         new() { Id = "portal", Name = "Portier", Description = "Poser un portail dédoubleur.", Condition = m => m.PortalCells.Count > 0 },
         new() { Id = "frenzy", Name = "Frénétique", Description = "Déclencher une frénésie.", Condition = m => m.FrenzyTimeLeft > 0 },
         new() { Id = "prestige", Name = "Nouvelle paire", Description = "Changer de chaussures une première fois.", Condition = m => m.Prestiges > 0 },
