@@ -75,15 +75,8 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     // dividers so balls fall cleanly into the slots.
     private bool IsDividerRow(int row) => (_rows - 1 - row) % 2 == 0;
     private int PegCount(int row) => IsDividerRow(row) ? SlotCount - 1 : SlotCount;
-    private float PegX(int row, int k)
-    {
-        if (IsDividerRow(row)) return WallLeft + (k + 1f) * _s;
-        // Outermost pegs of offset rows sit a bit closer to the wall than half a spacing, so
-        // no ball fits between them and the wall: there is no express lane down the side.
-        if (k == 0) return WallLeft + 0.4f * _s;
-        if (k == SlotCount - 1) return WallRight - 0.4f * _s;
-        return WallLeft + (k + 0.5f) * _s;
-    }
+    // Every peg is aligned either on a slot divider or on a slot centre.
+    private float PegX(int row, int k) => WallLeft + (IsDividerRow(row) ? k + 1f : k + 0.5f) * _s;
     public float AimRangeMin => AimMin;
     public float AimRangeMax => AimMax;
     public Vector2 LauncherPosition => new(_aimX, LauncherY);
