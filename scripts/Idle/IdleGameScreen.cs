@@ -33,6 +33,7 @@ public partial class IdleGameScreen : Node2D
     private bool _holding;
     private double _holdTimer;
     private int _textsThisWindow;
+    private int _bigTextsThisWindow;
     private double _textWindow;
 
     public override void _Ready()
@@ -80,6 +81,7 @@ public partial class IdleGameScreen : Node2D
 
         idle.PlacementRequested += OnPlacementRequested;
         idle.Announce += OnAnnounce;
+        idle.AchievementUnlocked += OnAchievement;
 
         for (int i = 0; i < idle.PendingPortals; i++)
         {
@@ -105,6 +107,7 @@ public partial class IdleGameScreen : Node2D
         var idle = IdleManager.Instance;
         idle.PlacementRequested -= OnPlacementRequested;
         idle.Announce -= OnAnnounce;
+        idle.AchievementUnlocked -= OnAchievement;
         GetTree().Paused = false;
     }
 
@@ -177,6 +180,7 @@ public partial class IdleGameScreen : Node2D
         {
             _textWindow = 0.5;
             _textsThisWindow = 0;
+            _bigTextsThisWindow = 0;
         }
     }
 
@@ -202,14 +206,17 @@ public partial class IdleGameScreen : Node2D
         bool big = crit || payout >= Math.Max(10.0, idle.IncomePerSecond * 0.5);
         var color = crit ? Pal.Gold : Pal.ForMultiplier(Mathf.Min(slot.Multiplier / (float)Math.Max(0.01, idle.SlotBoost), 200f));
 
-        if (big || _textsThisWindow < 6)
+        // With dozens of balls landing per second, only a few texts get through each half
+        // second (big hits first) so they stay readable.
+        bool showBig = big && _bigTextsThisWindow < 3;
+        if (showBig || (!big && _textsThisWindow < 5))
         {
-            _textsThisWindow++;
-            string text = (crit ? "CRITIQUE ! +" : "+") + Big.Format(payout);
-            Fx.FloatText(_fx, pos + new Vector2(0f, -16f), text, color, crit ? 30 : big ? 26 : 18, big ? 70f : 45f, big ? 1.2f : 0.8f);
+            if (showBig) _bigTextsThisWindow++; else _textsThisWindow++;
+            string text = (crit ? "CRIT +" : "+") + Big.Format(payout);
+            Fx.FloatText(_fx, pos + new Vector2(0f, -16f), text, color, crit ? 26 : big ? 24 : 18, big ? 70f : 45f, big ? 1.1f : 0.8f);
         }
 
-        if (big)
+        if (showBig)
         {
             Fx.Burst(_fx, pos, color, 30, 360f, 0.8f, 70f);
             _camera.AddTrauma(crit ? 0.35f : 0.2f);
@@ -229,6 +236,32 @@ public partial class IdleGameScreen : Node2D
         _cabinet.Celebrate();
         Sfx.Play(Sound.PalierClear);
         _banner.Show(title, detail, Pal.Gold, 1.6f);
+    }
+
+    // Several achievements can unlock in the same instant: show them one after another.
+    private readonly Queue<AchievementDef> _toasts = new();
+    private AchievementToast _toast;
+
+    private void OnAchievement(AchievementDef achievement)
+    {
+        _toasts.Enqueue(achievement);
+        if (_toast == null)
+        {
+            ShowNextToast();
+        }
+    }
+
+    private void ShowNextToast()
+    {
+        if (_toasts.Count == 0 || !IsInstanceValid(this))
+        {
+            _toast = null;
+            return;
+        }
+        Sfx.Play(Sound.Pick, 1.2f);
+        _toast = new AchievementToast { Achievement = _toasts.Dequeue() };
+        _toast.TreeExited += ShowNextToast;
+        AddChild(_toast);
     }
 
     private void OnAnnounce(string title, string text, Color color)

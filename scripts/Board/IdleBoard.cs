@@ -429,12 +429,14 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         _goldenChest.Opened += OnGoldenChestOpened;
         _chests.AddChild(_goldenChest);
         Sfx.Play(Sound.Chest, 1.3f, -4f);
+        GD.Print($"[Board] golden chest at {cell}");
     }
 
     private void OnGoldenChestOpened(Chest chest)
     {
         _occupied.Remove(chest.Cell);
         var (title, detail) = IdleManager.Instance.OpenGoldenChest();
+        GD.Print($"[Board] golden chest opened: {title} {detail}");
         GoldenChestOpened?.Invoke(chest, title, detail);
         chest.QueueFree();
         _goldenChest = null;

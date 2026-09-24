@@ -1,57 +1,74 @@
-# Plinko Palace
+# Plinko Palace — édition incrémentale
 
-Roguelike de Plinko en Godot 4.7 / C#. Tout est dessiné et synthétisé en code : aucun asset externe (ni image, ni son).
+Jeu incrémental (idle) de Plinko en Godot 4.7 / C#, inspiré de Cookie Clicker, Antimatter Dimensions et des « idle Plinko ». Tout est dessiné et synthétisé en code : aucun asset externe.
+
+> La version roguelike d'origine se trouve sur la branche `main`.
 
 ## Jouer
 
-- **Souris** : viser (le lanceur suit le curseur). **Clic** pour lâcher une bille, **clic maintenu** pour une rafale.
-- **Clavier** : `←/→` (ou `Q/D`) pour viser, `Espace` pour lâcher, `Échap` pour la pause, `F` pour la vitesse x2, `M` pour couper le son.
-- Cartes d'amélioration : clic, ou touches `1` / `2` / `3`.
+- **Souris** : viser (le lanceur suit le curseur). **Clic** ou **Espace** pour lâcher une bille, **clic maintenu** pour une rafale.
+- `←/→` (ou `Q/D`) pour viser, `Échap` pour la pause, `M` pour couper le son.
+- La partie se **sauvegarde toute seule**, toutes les 15 secondes et à la fermeture.
 
-## Règles
+## Boucle de jeu
 
-- Chaque **palier** donne un objectif de score et un nombre de billes. Si l'objectif n'est pas atteint quand toutes les billes sont tombées, la partie est perdue.
-- Un **boss** arrive tous les 5 paliers, avec deux handicaps : bâtons en plus, bâtons tournants, cases rétrécies…
-- Les bonnes cases remplissent la jauge d'**XP**. Chaque niveau fait apparaître un **coffre** (commun, rare ou épique) sur le plateau : touche-le avec une bille pour choisir une amélioration parmi trois.
-- Les mauvaises cases (x0.x) et les billes ratées remplissent la jauge de **malus**. Quand elle est pleine, un **coffre maudit** apparaît et impose un malus, dont tu choisis le moindre.
-- Le bonus **« Bâton à placer »** met le jeu en pause : tu choisis où poser le bâton (clic), et tu le fais tourner avec la molette ou le clic droit. Il garde sa place pour le reste de la partie. Le **bâton sauvage** (malus), lui, tombe au hasard.
-- **Portail dédoubleur** (rareté **légendaire**, environ 2 % des coffres) : tu le places, et chaque bille qui le traverse se dédouble, une fois par portail.
-- Les **cocktails** (8 recettes) sont des bonus passifs permanents, posés sur la machine. On les obtient avec l'amélioration épique « Cocktail surprise » ou avec les tongs.
-- Les **chaussures** sont le personnage, chacune avec son avantage de départ : Mocassins, Baskets fétiches, Talons dorés, Santiags, Tongs de plage.
-- Les **valeurs des cases** sont tirées au hasard à chaque partie (petits gains, gains moyens, jackpots, mauvaises cases de x0.1 à x0.8), avec toujours **autant de cases positives que négatives**. La disposition est ensuite validée par un calcul d'espérance (loi binomiale) : jamais injouable, jamais triviale.
+- **Pièces.** Chaque bille qui tombe dans une case rapporte *valeur de la bille × multiplicateur de la case × bonus*. Les cases sont symétriques : faibles au centre, énormes sur les bords. Viser compte.
+- **Billes** (onglet *Billes*) : 6 types — Bille, Argent, Or, Diamant, Rubis, Cosmique. Chaque type vaut ~12× le précédent. Le prix augmente de 15 % à chaque achat, et on peut acheter par x1 / x10 / x100 / MAX. Chaque bille possédée retombe en boucle après une **recharge**. Au-delà de 24 billes d'un même type, chaque bille à l'écran en représente plusieurs, pour préserver les performances.
+- **Améliorations** (onglet *Améliorations*) :
+  - distributeur automatique ;
+  - recharge rapide ;
+  - polissage (x1,25 par niveau) ;
+  - +1 rangée (bords plus rentables) ;
+  - clous dorés (les clous rapportent) ;
+  - coup critique (x10) ;
+  - cases renforcées (x1,3 par niveau) ;
+  - portail dédoubleur, que l'on place soi-même et qui dédouble les billes.
+- **Coffre en or** : il apparaît de temps en temps sur le plateau. Une bille qui le touche déclenche une **frénésie** (gains x7 pendant 30 s) ou un **gros lot** de pièces.
+- **Gains hors-ligne** : une partie de tes revenus continue pendant ton absence (25 % sur 4 h au départ, améliorable).
 
-## Progression entre les parties
+## Prestige : les chaussures
 
-- Chaque fin de partie, et même un abandon, rapporte des **jetons** : 3 par palier réussi, 6 par boss battu, plus un bonus selon le niveau atteint.
-- L'**arbre de compétences** (bouton sur l'écran titre, ou touche `C`) a 3 branches de 4 nœuds. Chaque nœud demande au moins un niveau dans le nœud au-dessus :
-  - **Fortune** : gains, billes dorées, jackpots → *Portail d'ouverture* (chaque partie commence avec un portail).
-  - **Chance** : XP, coffres, relances de cartes (`R`) → *Quatrième carte* dans chaque coffre.
-  - **Sécurité** : billes, bouclier, jauge de malus → *Seconde chance* (+3 billes au lieu du game over si l'objectif est atteint à 60 % ou plus).
-- Le bouton « Réinitialiser » rembourse tous les jetons dépensés.
+- L'onglet *Chaussures* permet de **recommencer à zéro** (pièces, billes, améliorations) contre des **jetons**. Le nombre de jetons suit la racine cubique des gains de la partie, multipliée par le bonus des chaussures.
+- Les **chaussures sont des niveaux de difficulté** débloqués petit à petit. Chaque paire se débloque en gagnant assez dans une seule partie avec la paire précédente :
+
+| Chaussures | Contraintes | Jetons | Déblocage |
+|---|---|---|---|
+| Mocassins | aucune | x1 | départ |
+| Baskets fétiches | prix x2 | x3 | 10M en une partie |
+| Talons dorés | prix x2, cases x0,6 | x8 | 1B |
+| Santiags | prix x3, cases x0,6, recharge x2 | x20 | 100B |
+| Tongs de plage | prix x4, cases x0,5, recharge x2,5 | x60 | 10T |
+
+- Chaque jeton gagné donne **+1 % de revenus pour toujours**, et chaque paire débloquée **+50 %**.
+
+## Arbre de compétences
+
+L'arbre se paie en jetons et ses bonus sont permanents. Il a 3 branches de 4 nœuds :
+
+- **Fortune** : revenus, critiques, clous, puis *Bords dorés* (cases extrêmes x3).
+- **Automatisation** : distributeur offert, **Majordome** (achat automatique des billes), **Intendant** (achat automatique des améliorations), gains hors-ligne.
+- **Économie** : prix réduits, capital de départ, coffres en or, puis *Portail permanent*.
 
 ## Organisation du code
 
-| Dossier | Contenu |
+| Fichier / dossier | Contenu |
 |---|---|
-| `scripts/Main.cs` | Racine : environnement (bloom HDR), fondus, bascule écran titre ↔ partie |
-| `scripts/TitleScreen.cs` | Écran titre et choix des chaussures |
-| `scripts/GameScreen.cs` | Une partie : assemble la scène, relie les événements, gère les entrées et la pause |
-| `scripts/Autoload/` | `RunManager` (règles), `Sfx` (sons et musique synthétisés), `SaveData` (records) |
-| `scripts/Board/` | Plateau (génération adaptative, lanceur), coffres, bâtons, disposition des cases |
-| `scripts/Data/` | Statistiques, améliorations, malus, personnages, paliers et boss |
-| `scripts/Modifiers/` | Les cocktails |
-| `scripts/UI/` | HUD, cartes d'amélioration, bannières, pause, fin de partie, style commun |
-| `scripts/Visuals/` | Décor, borne, jambes et chaussures, effets (particules, texte flottant, tremblement) |
-| `scripts/Debug/AutoPilot.cs` | Bot de test (voir ci-dessous) |
+| `scripts/Autoload/IdleManager.cs` | Toute l'économie : coûts, gains, prestige, compétences, frénésie, achat auto, hors-ligne, sauvegarde |
+| `scripts/Data/IdleDefs.cs` | Types de billes, améliorations, arbre de compétences |
+| `scripts/Data/CharacterDef.cs` | Chaussures = difficultés |
+| `scripts/Board/IdleBoard.cs` | Plateau : réserve de billes, recharge, distributeur, portails, coffre en or |
+| `scripts/Idle/` | Écrans (titre, jeu), boutique, HUD de la borne, arbre de compétences |
+| `scripts/Visuals/`, `scripts/UI/Style.cs` | Décor, borne, chaussures, effets, style commun |
+| `scripts/Debug/AutoPilot.cs` | Bot de test et d'équilibrage |
 
 ## Tests automatiques (AutoPilot)
 
-Le jeu peut se jouer tout seul pour les tests d'intégration et l'équilibrage. Les options disponibles sont documentées en tête de `scripts/Debug/AutoPilot.cs`. Le bot n'écrit jamais dans les records.
+Le bot joue tout seul avec une stratégie gloutonne : il achète, place les portails, fait ses prestiges et dépense ses jetons, en journalisant l'économie. Il n'écrit jamais dans la sauvegarde.
 
 ```bash
-# 30 parties simulées sans fenêtre, en accéléré, avec un résumé par partie
-Godot_v4.7.2-stable_mono_win64_console.exe --headless --fixed-fps 60 --path . -- --autopilot --runs=30
+# 60 minutes de jeu simulées sans fenêtre
+Godot_v4.7.2-stable_mono_win64_console.exe --headless --fixed-fps 60 --path . -- --autopilot --minutes=60
 
-# Une partie en fenêtre, pilotée par de vrais clics souris, avec captures d'écran
-Godot_v4.7.2-stable_mono_win64_console.exe --audio-driver Dummy --path . -- --autopilot --mouse --shots=captures --shot-every=3
+# En fenêtre, avec captures d'écran et défilement des onglets de la boutique
+Godot_v4.7.2-stable_mono_win64_console.exe --audio-driver Dummy --path . -- --autopilot --shots=captures --tabs
 ```

@@ -15,6 +15,7 @@ public partial class IdleManager : Node
     public event Action BoardLayoutChanged;            // rows / slot multipliers changed
     public event Action<PlaceableKind> PlacementRequested;
     public event Action<string, string, Color> Announce;
+    public event Action<AchievementDef> AchievementUnlocked;
 
     public const int StartingBalls = 3;
     private const double AutosaveSeconds = 15.0;
@@ -37,6 +38,8 @@ public partial class IdleManager : Node
     public string ShoeId { get; private set; } = Characters.Classic.Id;
     public int UnlockedShoes { get; private set; } = 1;
     private readonly Dictionary<string, int> _skills = new();
+    private readonly HashSet<string> _achievements = new();
+    private double _achievementTimer;
     public bool AutoBuyBalls { get; set; } = true;
     public bool AutoBuyUpgrades { get; set; } = true;
 
@@ -97,8 +100,12 @@ public partial class IdleManager : Node
     // Permanent bonuses: every jeton ever earned (+1%), every pair of shoes unlocked (+50%).
     public double PrestigeBonus => (1.0 + 0.01 * JetonsEarnedTotal) * (1.0 + 0.5 * (UnlockedShoes - 1));
 
+    public bool HasAchievement(string id) => _achievements.Contains(id);
+    public int AchievementCount => _achievements.Count;
+    public double AchievementBonus => 1.0 + Achievements.BonusPerAchievement * _achievements.Count;
+
     public double GlobalMultiplier =>
-        Math.Pow(1.25, Level(IdleUpgrade.Value)) * (1.0 + 0.25 * SkillLevel("f_income")) * PrestigeBonus * FrenzyMultiplier;
+        Math.Pow(1.25, Level(IdleUpgrade.Value)) * (1.0 + 0.25 * SkillLevel("f_income")) * PrestigeBonus * AchievementBonus * FrenzyMultiplier;
 
     // Base multipliers of a board with `rows` rows: x1 in the middle, growing
     // quadratically-exponentially toward the edges; more rows = much bigger edges.
@@ -196,13 +203,18 @@ public partial class IdleManager : Node
 
     // ================================================================ earning
 
-    private void Earn(double amount)
+    // One-off windfalls (offline earnings, chest lump sums) don't count toward income per
+    // second, which would otherwise spike and feed back into the next offline estimate.
+    private void Earn(double amount, bool countsAsIncome = true)
     {
         if (amount <= 0 || double.IsNaN(amount) || double.IsInfinity(amount)) return;
         Coins += amount;
         RunEarned += amount;
         LifetimeEarned += amount;
-        _buckets[_bucket] += amount;
+        if (countsAsIncome)
+        {
+            _buckets[_bucket] += amount;
+        }
         CheckShoeUnlocks();
     }
 
@@ -234,7 +246,7 @@ public partial class IdleManager : Node
             return ("FRÉNÉSIE !", $"Gains x7 pendant {FrenzyTimeLeft:0} secondes");
         }
         double lump = (Math.Min(Coins * 0.15, IncomePerSecond * 900.0) + 25.0) * generosity;
-        Earn(lump);
+        Earn(lump, countsAsIncome: false);
         return ("JACKPOT DU COFFRE !", $"+{Big.Format(lump)} pièces");
     }
 
@@ -385,6 +397,13 @@ public partial class IdleManager : Node
             }
         }
 
+        _achievementTimer += delta;
+        if (_achievementTimer >= 0.5)
+        {
+            _achievementTimer = 0;
+            CheckAchievements();
+        }
+
         _autoBuyTimer += delta;
         if (_autoBuyTimer >= 0.3)
         {
@@ -397,6 +416,20 @@ public partial class IdleManager : Node
         {
             _autosaveTimer = 0;
             Save();
+        }
+    }
+
+    private void CheckAchievements()
+    {
+        foreach (var achievement in Achievements.All)
+        {
+            if (!_achievements.Contains(achievement.Id) && achievement.Condition(this))
+            {
+                _achievements.Add(achievement.Id);
+                GD.Print($"[Idle] achievement {achievement.Id}");
+                AchievementUnlocked?.Invoke(achievement);
+                Changed?.Invoke();
+            }
         }
     }
 
@@ -483,6 +516,7 @@ public partial class IdleManager : Node
         f.SetValue("meta", "autobuy_upgrades", AutoBuyUpgrades);
         f.SetValue("meta", "last_income", IncomePerSecond);
         f.SetValue("meta", "last_save", Time.GetUnixTimeFromSystem());
+        f.SetValue("meta", "achievements", string.Join(",", _achievements));
 
         foreach (var node in SkillTree.Nodes)
         {
@@ -530,6 +564,10 @@ public partial class IdleManager : Node
         UnlockedShoes = Math.Clamp((int)f.GetValue("meta", "unlocked_shoes", 1), 1, Characters.All.Count);
         AutoBuyBalls = (bool)f.GetValue("meta", "autobuy_balls", true);
         AutoBuyUpgrades = (bool)f.GetValue("meta", "autobuy_upgrades", true);
+        foreach (var id in ((string)f.GetValue("meta", "achievements", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            _achievements.Add(id);
+        }
         _loaded = true;
 
         // Offline earnings: a share of the last known income rate, capped in duration.
@@ -543,7 +581,7 @@ public partial class IdleManager : Node
             double cap = (4 + 8 * level) * 3600.0;
             OfflineSeconds = Math.Min(away, cap);
             OfflineGain = rate * OfflineSeconds * share;
-            Earn(OfflineGain);
+            Earn(OfflineGain, countsAsIncome: false);
             IncomePerSecond = rate;
             GD.Print($"[Idle] offline {away:0}s -> +{OfflineGain:0}");
         }
@@ -559,6 +597,7 @@ public partial class IdleManager : Node
     {
         SaveData.Wipe();
         _skills.Clear();
+        _achievements.Clear();
         LifetimeEarned = 0;
         Jetons = 0;
         JetonsEarnedTotal = 0;
@@ -573,7 +612,7 @@ public partial class IdleManager : Node
     // Debug/autopilot helpers.
     public void DebugGrant(double coins, int jetons)
     {
-        Earn(coins);
+        Earn(coins, countsAsIncome: false);
         Jetons += jetons;
         JetonsEarnedTotal += jetons;
         Changed?.Invoke();

@@ -76,12 +76,12 @@ public partial class Sfx : Node
             return;
         }
 
-        if (sound is Sound.Peg or Sound.Slot or Sound.Portal)
+        if (sound is Sound.Peg or Sound.Slot or Sound.Portal or Sound.Jackpot)
         {
             // Dozens of balls at once would otherwise turn into white noise.
             ulong now = Time.GetTicksMsec();
             int index = (int)sound;
-            ulong gap = sound == Sound.Peg ? 28UL : 45UL;
+            ulong gap = sound switch { Sound.Peg => 28UL, Sound.Jackpot => 180UL, _ => 45UL };
             if (now - _instance._lastPlayedMs.GetValueOrDefault(index) < gap)
             {
                 return;

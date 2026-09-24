@@ -175,6 +175,11 @@ public partial class ShopPanel : CanvasLayer
                 open.Pressed += () => { Sfx.Play(Sound.Click); OpenSkillTree?.Invoke(); };
                 _list.AddChild(open);
                 _list.AddChild(new StatsBlock());
+                _list.AddChild(Ui.Label($"SUCCÈS  ·  {idle.AchievementCount}/{Achievements.All.Length}  (+{idle.AchievementCount * 2}% de revenus)", 17, Pal.Gold, Fonts.Bold));
+                foreach (var achievement in Achievements.All)
+                {
+                    _list.AddChild(new AchievementRow { Achievement = achievement });
+                }
                 break;
         }
         Refresh();
@@ -542,7 +547,64 @@ public partial class StatsBlock : Control
             $"Gains totaux : {Big.Format(idle.LifetimeEarned)}\n" +
             $"Changements de chaussures : {idle.Prestiges}\n" +
             $"Jetons gagnés au total : {idle.JetonsEarnedTotal}\n" +
-            $"Paires débloquées : {idle.UnlockedShoes} / {Characters.All.Count}  (+{(idle.UnlockedShoes - 1) * 50}% de revenus)",
+            $"Paires débloquées : {idle.UnlockedShoes} / {Characters.All.Count}  (+{(idle.UnlockedShoes - 1) * 50}% de revenus)\n" +
+            $"Multiplicateur global actuel : x{Big.Format(idle.GlobalMultiplier)}",
             16, Pal.TextDim, Fonts.Regular, HorizontalAlignment.Left, new Vector2(8f, 12f), new Vector2(540f, 180f)));
+    }
+}
+
+public partial class AchievementRow : Control
+{
+    public AchievementDef Achievement;
+
+    public override void _Ready()
+    {
+        CustomMinimumSize = new Vector2(560f, 46f);
+        bool done = IdleManager.Instance.HasAchievement(Achievement.Id);
+        AddChild(Ui.Wrapped(Achievement.Name, 16, done ? Pal.Text : Pal.TextDim, Fonts.Bold, HorizontalAlignment.Left, new Vector2(46f, 3f), new Vector2(220f, 22f)));
+        AddChild(Ui.Wrapped(Achievement.Description, 13, Pal.TextDim, Fonts.Regular, HorizontalAlignment.Left, new Vector2(46f, 23f), new Vector2(480f, 20f)));
+    }
+
+    public override void _Draw()
+    {
+        bool done = IdleManager.Instance.HasAchievement(Achievement.Id);
+        var c = new Vector2(22f, 23f);
+        DrawCircle(c, 14f, done ? Pal.Gold.Darkened(0.5f) : new Color(0.12f, 0.08f, 0.15f));
+        DrawArc(c, 14f, 0f, Mathf.Tau, 28, done ? Pal.Gold : new Color(0.35f, 0.3f, 0.4f), 2f, true);
+        if (done)
+        {
+            DrawPolyline(new[] { c + new Vector2(-6f, 0f), c + new Vector2(-2f, 5f), c + new Vector2(7f, -5f) }, Pal.Hdr(Pal.Gold, 1.2f), 3f, true);
+        }
+    }
+}
+
+// Slides in at the top of the machine for a few seconds when an achievement unlocks.
+public partial class AchievementToast : CanvasLayer
+{
+    public AchievementDef Achievement;
+    private Control _box;
+
+    public override void _Ready()
+    {
+        Layer = 9;
+        _box = new ToastBox { Position = new Vector2(250f, -90f), Size = new Vector2(400f, 70f), MouseFilter = Control.MouseFilterEnum.Ignore };
+        AddChild(_box);
+        _box.AddChild(Ui.Wrapped("SUCCÈS : " + Achievement.Name, 18, Pal.Gold, Fonts.Bold, HorizontalAlignment.Center, new Vector2(10f, 8f), new Vector2(380f, 26f), 3));
+        _box.AddChild(Ui.Wrapped(Achievement.Description + "  ·  +2% de revenus", 13, Pal.Text, Fonts.Regular, HorizontalAlignment.Center, new Vector2(10f, 38f), new Vector2(380f, 24f)));
+        var tween = CreateTween();
+        tween.TweenProperty(_box, "position:y", 176f, 0.35f).SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+        tween.TweenInterval(1.8f);
+        tween.TweenProperty(_box, "modulate:a", 0f, 0.4f);
+        tween.TweenCallback(Callable.From(QueueFree));
+    }
+}
+
+public partial class ToastBox : Control
+{
+    public override void _Draw()
+    {
+        var rect = new Rect2(Vector2.Zero, Size);
+        DrawColoredPolygon(Paint.RoundedRect(rect, 14f), new Color(0.08f, 0.04f, 0.1f, 0.95f));
+        DrawPolyline(Paint.Closed(Paint.RoundedRect(rect, 14f)), Pal.Gold, 2f, true);
     }
 }
