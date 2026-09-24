@@ -325,7 +325,9 @@ public partial class IdleBoard : Node2D, IPlacementBoard
 
     private Ball Spawn(int tier, double stack, bool twin, Vector2 position, Vector2 velocity)
     {
-        float radius = 9f * Unit * (1f + 0.04f * tier);
+        // Small enough (max ~15.4 across at tier 5) to fit the 18-wide gap between a wall and
+        // the outermost peg of a row.
+        float radius = 7f * Unit * (1f + 0.02f * tier);
         position.X = Mathf.Clamp(position.X, WallLeft + radius + 2f, WallRight - radius - 2f);
         var ball = new Ball
         {
