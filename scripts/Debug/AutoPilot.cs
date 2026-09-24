@@ -17,6 +17,7 @@ namespace Plinko;
 //   --tabs                 cycle through the shop tabs (for screenshots)
 //   --skills-at=<sec>      open the skill tree once at that time (for screenshots)
 //   --no-prestige          never prestige
+//   --aim=<0..1>           always aim at that point of the aim range (0 = left, 1 = right)
 //   --prestige-at=<sec>    force one prestige (hardest unlocked shoes) at that real time
 public partial class AutoPilot : Node
 {
@@ -88,7 +89,7 @@ public partial class AutoPilot : Node
             var counts = Main.Instance?.Game?.Board?.LandingCounts;
             if (counts != null)
             {
-                GD.Print($"[AutoPilot] landings per slot: {string.Join(" ", System.Linq.Enumerable.Take(counts, IdleManager.Instance.Rows + 3))}");
+                GD.Print($"[AutoPilot] landings per slot: {string.Join(" ", System.Linq.Enumerable.Take(counts, IdleManager.SlotCount))}");
             }
             GetTree().Quit();
             return;
@@ -136,7 +137,7 @@ public partial class AutoPilot : Node
         {
             _aimTimer = 4.0;
             // Aim off-centre sometimes: the edges pay more.
-            float t = _rng.Randf();
+            float t = _args.ContainsKey("aim") ? (float)Parse("aim", 0.5) : _rng.Randf();
             game.Board.AimAtLocalX(Mathf.Lerp(game.Board.AimRangeMin, game.Board.AimRangeMax, t));
         }
 

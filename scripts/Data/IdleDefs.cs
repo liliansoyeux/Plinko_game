@@ -21,11 +21,11 @@ public static class BallTiers
     public static readonly BallTierDef[] All =
     {
         new() { Index = 0, Name = "Bille", Color = new Color(0.98f, 0.93f, 1f), Glow = Pal.Pink, Value = 1, Price = 1, UnlockCost = 0 },
-        new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 12, Price = 10, UnlockCost = 750 },
-        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 150, Price = 100, UnlockCost = 60_000 },
-        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 2_000, Price = 1_000, UnlockCost = 6e6 },
-        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 30_000, Price = 10_000, UnlockCost = 7e8 },
-        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 500_000, Price = 100_000, UnlockCost = 9e10 },
+        new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 8, Price = 7, UnlockCost = 1_000 },
+        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 64, Price = 50, UnlockCost = 400_000 },
+        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 512, Price = 350, UnlockCost = 1.5e8 },
+        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 4_096, Price = 2_500, UnlockCost = 6e10 },
+        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 32_768, Price = 17_500, UnlockCost = 2.5e13 },
     };
 }
 
@@ -63,25 +63,25 @@ public static class Upgrades
         new()
         {
             Id = IdleUpgrade.AutoDropper, Name = "Distributeur automatique", Icon = UpgradeIcon.Gear,
-            Describe = _ => "Lâche tes billes tout seul, en continu (1 bille par seconde au départ).",
+            Describe = _ => "Lâche tes billes tout seul, en continu (2 billes par seconde au départ).",
             BaseCost = 30, Growth = 1, MaxLevel = 1,
         },
         new()
         {
             Id = IdleUpgrade.Cadence, Name = "Cadence", Icon = UpgradeIcon.Clock,
-            Describe = l => $"Le distributeur lâche 40% de billes en plus par seconde (niveau {l + 1}).",
-            BaseCost = 60, Growth = 2.6, MaxLevel = 30,
+            Describe = l => $"Le distributeur lâche 25% de billes en plus par seconde (niveau {l + 1}).",
+            BaseCost = 40, Growth = 3.2, MaxLevel = 40,
         },
         new()
         {
             Id = IdleUpgrade.Value, Name = "Polissage", Icon = UpgradeIcon.Multiplier,
-            Describe = l => $"Toutes les billes rapportent x1,25 (niveau {l + 1}).",
-            BaseCost = 100, Growth = 9, MaxLevel = 30,
+            Describe = l => $"Toutes les billes rapportent x1,2 (niveau {l + 1}).",
+            BaseCost = 100, Growth = 10, MaxLevel = 30,
         },
         new()
         {
             Id = IdleUpgrade.Rows, Name = "+1 Rangée", Icon = UpgradeIcon.Rows,
-            Describe = l => $"Plateau plus grand : les cases du bord rapportent bien plus ({BaseRows + l + 1} rangées).",
+            Describe = l => $"Les billes s'éparpillent plus et les bords rapportent plus ({BaseRows + l + 1} rangées).",
             BaseCost = 1_000, Growth = 25, MaxLevel = 8,
         },
         new()
@@ -94,12 +94,12 @@ public static class Upgrades
         {
             Id = IdleUpgrade.Critical, Name = "Coup critique", Icon = UpgradeIcon.Star,
             Describe = l => $"{(l + 1) * 3}% de chances qu'une bille rapporte x10.",
-            BaseCost = 2_500, Growth = 4, MaxLevel = 15,
+            BaseCost = 2_500, Growth = 5, MaxLevel = 15,
         },
         new()
         {
             Id = IdleUpgrade.Slots, Name = "Cases renforcées", Icon = UpgradeIcon.NarrowSlots,
-            Describe = l => $"Tous les multiplicateurs de cases x1,3 (niveau {l + 1}).",
+            Describe = l => $"Tous les multiplicateurs de cases x1,25 (niveau {l + 1}).",
             BaseCost = 6_000, Growth = 12, MaxLevel = 25,
         },
         new()

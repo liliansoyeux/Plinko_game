@@ -18,9 +18,10 @@ public partial class IdleManager : Node
     public event Action<AchievementDef> AchievementUnlocked;
 
     public const int StartingBalls = 25;
-    public const double StartingCoins = 10;
+    public const int SlotCount = 13;
+    public const double StartingCoins = 50;
     private const double AutosaveSeconds = 15.0;
-    private const double BaseCadence = 1.0;   // balls per second from the dropper
+    private const double BaseCadence = 2.0;   // balls per second from the dropper
     private const double JetonScale = 1e6;
 
     // ---- current run
@@ -94,13 +95,13 @@ public partial class IdleManager : Node
 
     // Balls per second released by the auto-dropper.
     public double Cadence => HasAutoDropper
-        ? BaseCadence * Math.Pow(1.4, Level(IdleUpgrade.Cadence)) * (1.0 + 0.15 * SkillLevel("a_auto")) * Shoe.CadenceMultiplier
+        ? BaseCadence * Math.Pow(1.25, Level(IdleUpgrade.Cadence)) * (1.0 + 0.15 * SkillLevel("a_auto")) * Shoe.CadenceMultiplier
         : 0.0;
 
     public double CritChance => Math.Min(0.6, 0.03 * Level(IdleUpgrade.Critical));
     public double CritMultiplier => 10 + 5 * SkillLevel("f_crit");
     public double PegFraction => 0.03 * Level(IdleUpgrade.GoldenPegs) * Math.Pow(2, SkillLevel("f_pegs"));
-    public double SlotBoost => Math.Pow(1.3, Level(IdleUpgrade.Slots)) * Shoe.SlotMultiplier;
+    public double SlotBoost => Math.Pow(1.25, Level(IdleUpgrade.Slots)) * Shoe.SlotMultiplier;
     public double EdgeBoost => SkillLevel("f_edges") > 0 ? 3.0 : 1.0;
 
     public double CostMultiplier => Shoe.CostMultiplier * (1.0 - 0.05 * SkillLevel("e_cost"));
@@ -113,13 +114,13 @@ public partial class IdleManager : Node
     public double AchievementBonus => 1.0 + Achievements.BonusPerAchievement * _achievements.Count;
 
     public double GlobalMultiplier =>
-        Math.Pow(1.25, Level(IdleUpgrade.Value)) * (1.0 + 0.25 * SkillLevel("f_income")) * PrestigeBonus * AchievementBonus * FrenzyMultiplier;
+        Math.Pow(1.2, Level(IdleUpgrade.Value)) * (1.0 + 0.25 * SkillLevel("f_income")) * PrestigeBonus * AchievementBonus * FrenzyMultiplier;
 
     // Base multipliers of a board with `rows` rows: x1 in the middle, growing
     // quadratically-exponentially toward the edges; more rows = much bigger edges.
     public static double[] BaseSlotMultipliers(int rows)
     {
-        int n = rows + 3;
+        int n = SlotCount;
         double c = (n - 1) / 2.0;
         // The middle pays less than a ball costs (x0.7): aiming off-centre is what turns a
         // profit, and the edges are the jackpots.

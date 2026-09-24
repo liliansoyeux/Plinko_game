@@ -16,7 +16,6 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     public event Action<Chest, string, string> GoldenChestOpened;
     public event Action<Vector2> BallDuplicated;
 
-    private const int FirstRowPegCount = 3;
     private const float MaxSpacing = 58f;
     private const float RowRatio = 0.9f;
     private const float BaseSpacing = 48f;
@@ -57,7 +56,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     public float Spacing => _s;
     public bool LauncherActive { get; set; } = true;
 
-    private int SlotCount => _rows + FirstRowPegCount;
+    private static int SlotCount => IdleManager.SlotCount;
     private float LauncherY => _top - _s * 1.05f;
     private float LastRowY => _top + (_rows - 1) * _sy;
     private float SlotHeight => _s * 1.25f;
@@ -65,16 +64,27 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private float FloorY => SlotTop + SlotHeight + _s * 0.25f;
     private float WallLeft => _cx - SlotCount * _s / 2f;
     private float WallRight => _cx + SlotCount * _s / 2f;
-    // You aim between the outer pegs of the first row, not at the edges.
-    private float AimMin => _cx - _s * 0.9f;
-    private float AimMax => _cx + _s * 0.9f;
+    // Rectangular board (like the TV-show Plinko): staggered rows span the full width, so
+    // a ball always meets pegs and can't slide down a wall. You can aim anywhere but the
+    // outer 3 slots: reaching an edge slot takes a lucky random walk (a few % when aiming
+    // that side), and extra rows scatter balls more, making edges a bit more reachable.
+    private const float AimMargin = 3.5f;
+    private float AimMin => WallLeft + _s * AimMargin;
+    private float AimMax => WallRight - _s * AimMargin;
 
-    // Angled rails hug the peg pyramid, 0.62 spacing outside its outermost pegs: just wide
-    // enough for a ball to pass, so it can never fall outside the pyramid and slide down a
-    // side wall straight into an edge slot. Reaching an edge takes going "outward" at every
-    // single row (about 1 in 2^rows).
-    private const float RailOffset = 0.62f;
-    private float RailHalfWidthAt(float y) => (1f + RailOffset + 0.5f * Mathf.Max(0f, (y - _top) / _sy)) * _s;
+    // Rows alternate between two peg layouts; the last row always has its pegs on the slot
+    // dividers so balls fall cleanly into the slots.
+    private bool IsDividerRow(int row) => (_rows - 1 - row) % 2 == 0;
+    private int PegCount(int row) => IsDividerRow(row) ? SlotCount - 1 : SlotCount;
+    private float PegX(int row, int k)
+    {
+        if (IsDividerRow(row)) return WallLeft + (k + 1f) * _s;
+        // Outermost pegs of offset rows sit a bit closer to the wall than half a spacing, so
+        // no ball fits between them and the wall: there is no express lane down the side.
+        if (k == 0) return WallLeft + 0.4f * _s;
+        if (k == SlotCount - 1) return WallRight - 0.4f * _s;
+        return WallLeft + (k + 0.5f) * _s;
+    }
     public float AimRangeMin => AimMin;
     public float AimRangeMax => AimMax;
     public Vector2 LauncherPosition => new(_aimX, LauncherY);
@@ -132,10 +142,15 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             Clear(_walls);
             for (int row = 0; row < _rows; row++)
             {
-                var (startX, _) = RowRange(row);
-                for (int i = 0; i < FirstRowPegCount + row; i++)
+                for (int i = 0; i < PegCount(row); i++)
                 {
-                    _pegs.AddChild(new Peg { Position = new Vector2(startX + i * _s, RowY(row)), Radius = 6f * Unit });
+                    _pegs.AddChild(new Peg { Position = new Vector2(PegX(row, i), RowY(row)), Radius = 6f * Unit });
+                }
+                if (IsDividerRow(row))
+                {
+                    // Half-pegs on the walls kick balls hugging a wall back into the field.
+                    _pegs.AddChild(new Peg { Position = new Vector2(WallLeft + 0.12f * _s, RowY(row)), Radius = 6f * Unit });
+                    _pegs.AddChild(new Peg { Position = new Vector2(WallRight - 0.12f * _s, RowY(row)), Radius = 6f * Unit });
                 }
             }
             CreateWalls();
@@ -149,13 +164,6 @@ public partial class IdleBoard : Node2D, IPlacementBoard
 
         BuildSlots();
         _aimTargetX = Mathf.Clamp(_aimTargetX, AimMin, AimMax);
-    }
-
-    private (float startX, float endX) RowRange(int row)
-    {
-        float width = (FirstRowPegCount + row - 1) * _s;
-        float startX = _cx - width / 2f;
-        return (startX, startX + width);
     }
 
     private float RowY(int row) => _top + row * _sy;
@@ -183,30 +191,6 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             var post = new StaticBody2D { Position = new Vector2(WallLeft + i * _s, SlotTop - 1f), CollisionLayer = PhysicsLayers.Board, CollisionMask = 0 };
             post.AddChild(new CollisionShape2D { Shape = new CircleShape2D { Radius = 2.5f * Unit } });
             _walls.AddChild(post);
-        }
-
-        // Pyramid rails: one convex block per side filling everything outside the rail.
-        float blockTop = Area.Position.Y - 400f;
-        float railBottom = RailHalfWidthAt(SlotTop);
-        foreach (float side in new[] { -1f, 1f })
-        {
-            var points = new[]
-            {
-                new Vector2(_cx + side * RailHalfWidthAt(_top), blockTop),
-                new Vector2(_cx + side * RailHalfWidthAt(_top), _top),
-                new Vector2(_cx + side * railBottom, SlotTop),
-                new Vector2(_cx + side * (SlotCount * _s / 2f + 40f), SlotTop),
-                new Vector2(_cx + side * (SlotCount * _s / 2f + 40f), blockTop),
-            };
-            if (side > 0f) System.Array.Reverse(points);
-            var rail = new StaticBody2D
-            {
-                CollisionLayer = PhysicsLayers.Board,
-                CollisionMask = 0,
-                PhysicsMaterialOverride = new PhysicsMaterial { Bounce = 0.25f, Friction = 0.05f },
-            };
-            rail.AddChild(new CollisionShape2D { Shape = new ConvexPolygonShape2D { Points = points } });
-            _walls.AddChild(rail);
         }
 
         var floor = new Area2D { Position = new Vector2(_cx, FloorY), CollisionLayer = 0, CollisionMask = PhysicsLayers.Ball, Monitorable = false };
@@ -254,7 +238,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         var cells = new List<Vector2I>();
         for (int row = Math.Max(1, minRow); row <= Math.Min(maxRow, _rows - 2); row++)
         {
-            for (int k = 0; k < FirstRowPegCount + row - 1; k++)
+            for (int k = 0; k < PegCount(row) - 1; k++)
             {
                 var cell = new Vector2I(row, k);
                 if (!_occupied.Contains(cell)) cells.Add(cell);
@@ -263,11 +247,8 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         return cells;
     }
 
-    public Vector2 CellCenter(Vector2I cell)
-    {
-        var (startX, _) = RowRange(cell.X);
-        return new Vector2(startX + (cell.Y + 0.5f) * _s, RowY(cell.X) + _sy / 2f);
-    }
+    public Vector2 CellCenter(Vector2I cell) =>
+        new((PegX(cell.X, cell.Y) + PegX(cell.X, cell.Y + 1)) / 2f, RowY(cell.X) + _sy / 2f);
 
     public List<Vector2I> FreeCellsFor(PlaceableKind kind) => FreeCells(1, _rows - 2);
 
@@ -461,45 +442,15 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     public override void _Draw()
     {
         float railTop = LauncherY - _s * 0.5f;
-        float topHalf = RailHalfWidthAt(_top);
-        float bottomHalf = RailHalfWidthAt(SlotTop);
-        var outline = new[]
-        {
-            new Vector2(_cx - topHalf, railTop), new Vector2(_cx + topHalf, railTop),
-            new Vector2(_cx + topHalf, _top), new Vector2(_cx + bottomHalf, SlotTop),
-            new Vector2(WallRight, SlotTop), new Vector2(WallRight, FloorY),
-            new Vector2(WallLeft, FloorY), new Vector2(WallLeft, SlotTop),
-            new Vector2(_cx - bottomHalf, SlotTop), new Vector2(_cx - topHalf, _top),
-        };
-        var fieldTop = new Color(0.07f, 0.03f, 0.1f, 0.88f);
-        var fieldBottom = new Color(0.03f, 0.01f, 0.06f, 0.95f);
-        var fieldColors = new Color[outline.Length];
-        for (int i = 0; i < outline.Length; i++)
-        {
-            fieldColors[i] = fieldTop.Lerp(fieldBottom, Mathf.Clamp((outline[i].Y - railTop) / (FloorY - railTop), 0f, 1f));
-        }
-        DrawPolygon(outline, fieldColors);
+        var field = new Rect2(WallLeft, railTop, WallRight - WallLeft, FloorY - railTop);
+        Paint.VerticalGradient(this, field, new Color(0.07f, 0.03f, 0.1f, 0.88f), new Color(0.03f, 0.01f, 0.06f, 0.95f));
+        Paint.VerticalGradient(this, new Rect2(WallLeft, _top - _s * 0.5f, WallRight - WallLeft, LastRowY - _top + _s),
+            new Color(0.55f, 0.2f, 0.7f, 0.12f), new Color(0.3f, 0.1f, 0.5f, 0.04f));
 
-        var (firstStart, firstEnd) = RowRange(0);
-        var (lastStart, lastEnd) = RowRange(_rows - 1);
-        var glowTop = new Color(0.55f, 0.2f, 0.7f, 0.16f);
-        var glowBottom = new Color(0.3f, 0.1f, 0.5f, 0.05f);
-        DrawPolygon(new[]
+        foreach (float x in new[] { WallLeft, WallRight })
         {
-            new Vector2(firstStart - _s, _top - _s * 0.5f), new Vector2(firstEnd + _s, _top - _s * 0.5f),
-            new Vector2(lastEnd + _s, LastRowY + _s * 0.4f), new Vector2(lastStart - _s, LastRowY + _s * 0.4f),
-        }, new[] { glowTop, glowTop, glowBottom, glowBottom });
-
-        foreach (float side in new[] { -1f, 1f })
-        {
-            var rail = new[]
-            {
-                new Vector2(_cx + side * topHalf, railTop), new Vector2(_cx + side * topHalf, _top),
-                new Vector2(_cx + side * bottomHalf, SlotTop), new Vector2(_cx + side * SlotCount * _s / 2f, SlotTop),
-                new Vector2(_cx + side * SlotCount * _s / 2f, FloorY),
-            };
-            DrawPolyline(rail, Pal.Alpha(Pal.Pink, 0.25f), 8f, true);
-            DrawPolyline(rail, Pal.Hdr(Pal.Pink, 1.8f), 2.5f, true);
+            DrawLine(new Vector2(x, railTop), new Vector2(x, FloorY), Pal.Alpha(Pal.Pink, 0.25f), 8f);
+            DrawLine(new Vector2(x, railTop), new Vector2(x, FloorY), Pal.Hdr(Pal.Pink, 1.8f), 2.5f);
         }
 
         // Launcher rail + nozzle.
