@@ -1,0 +1,9 @@
+# Godot
+.godot/
+*.translation
+export_presets.cfg
+
+# .NET build output
+bin/
+obj/
+*.user
