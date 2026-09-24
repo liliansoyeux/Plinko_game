@@ -66,10 +66,11 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private float WallRight => _cx + SlotCount * _s / 2f;
     // Rectangular board (like the TV-show Plinko): staggered rows span the full width, so
     // a ball always meets pegs and can't slide down a wall. The launcher can aim across
-    // the whole field (manual drops); auto drops spawn at random along the top instead.
-    private const float AimMargin = 0.35f;
-    private float AimMin => WallLeft + _s * AimMargin;
-    private float AimMax => WallRight - _s * AimMargin;
+    // the width of the second peg row (manual drops); auto drops spawn at random there too.
+    // Launch zone (click and auto drops): from the first to the last peg of the second row,
+    // so a ball dropped at the far side can't just fall straight into an edge slot.
+    private float AimMin => PegX(1, 0);
+    private float AimMax => PegX(1, PegCount(1) - 1);
 
     // Rows alternate between two peg layouts; the last row always has its pegs on the slot
     // dividers so balls fall cleanly into the slots.
