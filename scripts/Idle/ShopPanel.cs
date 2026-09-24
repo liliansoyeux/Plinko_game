@@ -123,7 +123,7 @@ public partial class ShopPanel : CanvasLayer
         {
             case Tab.Balls:
                 _list.AddChild(BuildAmountBar());
-                _list.AddChild(Note("Chaque bille achetée tombe une seule fois puis disparaît : vise les bords, les cases du centre rapportent moins que le prix d'une bille."));
+                _list.AddChild(Note("Chaque bille achetée tombe une seule fois puis disparaît. Acheter fait monter le prix de ce type de bille, qui redescend avec le temps."));
                 if (idle.HasAutoRestock)
                 {
                     _list.AddChild(AutoToggle("Réapprovisionnement automatique", idle.AutoBuyBalls, v => idle.AutoBuyBalls = v));
@@ -366,9 +366,9 @@ public partial class BallRow : ShopRowBase
             return;
         }
         double amount = Amount();
-        double cost = price * amount;
+        double cost = idle.BallCost(Tier, amount);
         Title.Text = $"{def.Name}  ·  stock {Big.Format(idle.Stock[Tier])}";
-        Info.Text = $"Prix {Big.Format(price)}  ·  vaut {Big.Format(each)} x la case où elle tombe (rentable au-dessus de x{Big.Format(price / Math.Max(1e-9, each))}).";
+        Info.Text = $"Prix du marché {Big.Format(price)} (monte quand tu achètes, redescend avec le temps)  ·  vaut {Big.Format(each)} x la case.";
         Buy.Text = $"Acheter x{Big.Format(amount)}\n{Big.Format(cost)}";
         Buy.Disabled = cost > idle.Coins;
     }

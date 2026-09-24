@@ -30,6 +30,10 @@ public partial class IdleManager : Node
     // Consumable stock: a ball is spent when it drops and destroyed when it lands.
     public double[] Stock { get; private set; } = new double[BallTiers.All.Length];
     public int TiersUnlocked { get; private set; } = 1;
+    // Recent purchases per tier ("market pressure"): every ball bought makes the next one of
+    // that tier dearer, and the pressure fades over time so prices come back down.
+    public double[] Bought { get; private set; } = new double[BallTiers.All.Length];
+    private const double MarketHalfLife = 60.0;
     public int[] UpgradeLevels { get; private set; } = new int[Upgrades.All.Length];
     public List<Vector2I> PortalCells { get; } = new();
     public int PendingPortals { get; private set; }
@@ -122,10 +126,11 @@ public partial class IdleManager : Node
     {
         int n = SlotCount;
         double c = (n - 1) / 2.0;
-        // The middle pays less than a ball costs (x0.7): aiming off-centre is what turns a
-        // profit, and the edges are the jackpots.
-        const double centre = 0.7;
-        double edgeMax = 25.0 * Math.Pow(rows / 8.0, 2.0);
+        // The middle pays less than a ball costs (x0.5) and the edges are the jackpots. Auto
+        // drops land roughly uniformly, so these values average about x2.4 per ball; aiming
+        // manual drops at the edges pays much more.
+        const double centre = 0.5;
+        double edgeMax = 8.0 * Math.Pow(rows / 8.0, 2.0);
         var result = new double[n];
         for (int i = 0; i < n; i++)
         {
@@ -150,19 +155,41 @@ public partial class IdleManager : Node
 
     // ================================================================ costs & purchases
 
-    public double BallPrice(int tier) =>
+    // Price of the next ball of a tier: base * (1 + pressure/PriceScale)^PricePower, where the
+    // pressure is recent purchases (halving every minute). Buying a lot pushes the price up;
+    // waiting brings it back down, so the economy can never lock itself.
+    private const double PriceScale = 400.0;
+    private const double PricePower = 1.3;
+
+    private double BasePrice(int tier) =>
         BallTiers.All[tier].Price * CostMultiplier * (1.0 - 0.1 * SkillLevel("a_balls"));
 
-    public double MaxAffordableBalls(int tier) => Math.Floor(Coins / BallPrice(tier));
+    // Antiderivative of the price curve, so buying `a` balls at once costs F(n+a) - F(n).
+    private double PriceIntegral(int tier, double n) =>
+        BasePrice(tier) * PriceScale / (PricePower + 1.0) * Math.Pow(1.0 + n / PriceScale, PricePower + 1.0);
+
+    public double BallPrice(int tier) => BasePrice(tier) * Math.Pow(1.0 + Bought[tier] / PriceScale, PricePower);
+
+    public double BallCost(int tier, double amount) =>
+        PriceIntegral(tier, Bought[tier] + amount) - PriceIntegral(tier, Bought[tier]);
+
+    public double MaxAffordableBalls(int tier)
+    {
+        double k = BasePrice(tier) * PriceScale / (PricePower + 1.0);
+        double target = (PriceIntegral(tier, Bought[tier]) + Coins) / k;
+        double reach = PriceScale * (Math.Pow(target, 1.0 / (PricePower + 1.0)) - 1.0);
+        return Math.Max(0, Math.Floor(reach - Bought[tier]));
+    }
 
     public bool BuyBalls(int tier, double amount)
     {
         amount = Math.Floor(amount);
         if (amount <= 0 || tier >= TiersUnlocked) return false;
-        double cost = BallPrice(tier) * amount;
+        double cost = BallCost(tier, amount);
         if (cost > Coins) return false;
         Coins -= cost;
         Stock[tier] += amount;
+        Bought[tier] += amount;
         // Income is shown net of ball purchases: that's the real profit of the machine.
         _buckets[_bucket] -= cost;
         Changed?.Invoke();
@@ -336,6 +363,7 @@ public partial class IdleManager : Node
         RunEarned = 0;
         Stock = new double[BallTiers.All.Length];
         Stock[0] = StartingBalls;
+        Bought = new double[BallTiers.All.Length];
         TiersUnlocked = 1;
         UpgradeLevels = new int[Upgrades.All.Length];
         if (SkillLevel("a_auto") > 0)
@@ -432,6 +460,12 @@ public partial class IdleManager : Node
             }
         }
 
+        double decay = Math.Exp(-delta * Math.Log(2.0) / MarketHalfLife);
+        for (int t = 0; t < Bought.Length; t++)
+        {
+            Bought[t] *= decay;
+        }
+
         // Anti soft-lock: broke and out of balls? A free basic ball every second.
         if (TotalStock < 1 && Coins < BallPrice(0))
         {
@@ -505,11 +539,20 @@ public partial class IdleManager : Node
     {
         double target = Math.Max(30, Cadence * 20);
         if (TotalStock >= target) return false;
-        for (int t = TiersUnlocked - 1; t >= 0; t--)
+        // Buy whichever tier gives the most value per coin at today's market prices.
+        var order = new List<int>();
+        for (int t = 0; t < TiersUnlocked; t++) order.Add(t);
+        order.Sort((a, b) => (BallTiers.All[b].Value / BallPrice(b)).CompareTo(BallTiers.All[a].Value / BallPrice(a)));
+        foreach (int t in order)
         {
             // Never spend more than half the bank on stock: upgrades need coins too.
-            double affordable = Math.Floor(Coins * 0.5 / BallPrice(t));
+            double half = Coins * 0.5;
+            double affordable = Math.Floor(half / BallPrice(t));
             double amount = Math.Min(affordable, target - TotalStock);
+            while (amount >= 1 && BallCost(t, amount) > half)
+            {
+                amount = Math.Floor(amount * 0.8);
+            }
             if (amount >= 1 && BuyBalls(t, amount))
             {
                 return true;
@@ -549,6 +592,7 @@ public partial class IdleManager : Node
         f.SetValue("run", "earned", RunEarned);
         f.SetValue("run", "stock", string.Join(",", Array.ConvertAll(Stock, v => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
         f.SetValue("run", "tiers", TiersUnlocked);
+        f.SetValue("run", "bought", string.Join(",", Array.ConvertAll(Bought, v => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
         f.SetValue("run", "upgrades", string.Join(",", UpgradeLevels));
         var portals = new List<string>();
         foreach (var c in PortalCells) portals.Add($"{c.X}:{c.Y}");
@@ -600,6 +644,11 @@ public partial class IdleManager : Node
             double.TryParse(stock[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out Stock[i]);
         }
         TiersUnlocked = Math.Clamp((int)f.GetValue("run", "tiers", 1), 1, BallTiers.All.Length);
+        var bought = ((string)f.GetValue("run", "bought", "")).Split(',', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < Bought.Length && i < bought.Length; i++)
+        {
+            double.TryParse(bought[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out Bought[i]);
+        }
         ParseInts((string)f.GetValue("run", "upgrades", ""), UpgradeLevels);
         foreach (var part in ((string)f.GetValue("run", "portals", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
         {

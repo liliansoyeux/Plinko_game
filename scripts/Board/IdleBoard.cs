@@ -65,10 +65,9 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private float WallLeft => _cx - SlotCount * _s / 2f;
     private float WallRight => _cx + SlotCount * _s / 2f;
     // Rectangular board (like the TV-show Plinko): staggered rows span the full width, so
-    // a ball always meets pegs and can't slide down a wall. You can aim anywhere but the
-    // outer 3 slots: reaching an edge slot takes a lucky random walk (a few % when aiming
-    // that side), and extra rows scatter balls more, making edges a bit more reachable.
-    private const float AimMargin = 3.5f;
+    // a ball always meets pegs and can't slide down a wall. The launcher can aim across
+    // the whole field (manual drops); auto drops spawn at random along the top instead.
+    private const float AimMargin = 0.35f;
     private float AimMin => WallLeft + _s * AimMargin;
     private float AimMax => WallRight - _s * AimMargin;
 
@@ -145,12 +144,6 @@ public partial class IdleBoard : Node2D, IPlacementBoard
                 for (int i = 0; i < PegCount(row); i++)
                 {
                     _pegs.AddChild(new Peg { Position = new Vector2(PegX(row, i), RowY(row)), Radius = 6f * Unit });
-                }
-                if (IsDividerRow(row))
-                {
-                    // Half-pegs on the walls kick balls hugging a wall back into the field.
-                    _pegs.AddChild(new Peg { Position = new Vector2(WallLeft + 0.12f * _s, RowY(row)), Radius = 6f * Unit });
-                    _pegs.AddChild(new Peg { Position = new Vector2(WallRight - 0.12f * _s, RowY(row)), Radius = 6f * Unit });
                 }
             }
             CreateWalls();
@@ -306,7 +299,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
 
     // ---------------------------------------------------------------- dropping
 
-    private bool DropNext(float x, double count)
+    private bool DropNext(float x, double count, bool launcher = true)
     {
         if (_inFlight >= MaxBallsInFlight)
         {
@@ -317,8 +310,13 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         {
             return false;
         }
-        Spawn(tier, taken, false, new Vector2(x, LauncherY + _s * 0.2f), new Vector2((float)GD.RandRange(-12.0, 12.0), 40f));
-        _launcherPulse = 1f;
+        // Auto drops appear just above the first row, a little randomly in height too.
+        float y = launcher ? LauncherY + _s * 0.2f : _top - _s * (0.5f + (float)GD.Randf() * 0.4f);
+        Spawn(tier, taken, false, new Vector2(x, y), new Vector2((float)GD.RandRange(-12.0, 12.0), 40f));
+        if (launcher)
+        {
+            _launcherPulse = 1f;
+        }
         return true;
     }
 
@@ -422,9 +420,9 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             _autoDropBudget = Math.Min(bundle * 4, _autoDropBudget + delta * idle.Cadence);
             while (_autoDropBudget >= bundle)
             {
-                // Auto drops scatter a little around the aimed spot.
-                float x = _aimX + (float)GD.RandRange(-0.3, 0.3) * _s;
-                if (!DropNext(x, bundle))
+                // Auto drops rain from a random spot above the field, not from the launcher.
+                float x = (float)GD.RandRange(AimMin, AimMax);
+                if (!DropNext(x, bundle, launcher: false))
                 {
                     _autoDropBudget = Math.Min(_autoDropBudget, bundle);
                     break;
