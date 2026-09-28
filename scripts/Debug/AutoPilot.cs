@@ -160,20 +160,15 @@ public partial class AutoPilot : Node
         if (_buyTimer <= 0)
         {
             _buyTimer = 0.5;
-            // Unlock the next ball tier when it's cheap relative to the bank, then upgrades,
-            // then restock (manual restock until the auto-restock upgrade is bought).
-            if (idle.TiersUnlocked < BallTiers.All.Length && idle.TierUnlockCost(idle.TiersUnlocked) < idle.Coins * 0.6)
+            // Forge the next ball tier when it's cheap relative to the bank, then upgrades.
+            if (idle.CanForge && idle.TierUnlockCost(idle.TiersUnlocked) < idle.Coins * 0.6)
             {
-                idle.UnlockTier(idle.TiersUnlocked);
+                idle.Forge();
             }
             for (int i = 0; i < 6 && idle.BuyCheapestUpgrade(); i++) { }
             if (!idle.IsMaxed(IdleUpgrade.Portal) && idle.UpgradeCost(IdleUpgrade.Portal) < idle.Coins * 0.5)
             {
                 idle.BuyUpgrade(IdleUpgrade.Portal);
-            }
-            if (!idle.HasAutoRestock)
-            {
-                idle.Restock();
             }
         }
 
@@ -239,7 +234,7 @@ public partial class AutoPilot : Node
     {
         var idle = IdleManager.Instance;
         GD.Print($"[AutoPilot] {tag} t={_gameTime / 60.0:0.0}min coins={Big.Format(idle.Coins)} income={Big.Format(idle.IncomePerSecond)}/s " +
-                 $"run={Big.Format(idle.RunEarned)} stock={Big.Format(idle.TotalStock)} tiers={idle.TiersUnlocked} cadence={idle.Cadence:0.0} upg={string.Join("/", idle.UpgradeLevels)} " +
+                 $"run={Big.Format(idle.RunEarned)} tiers={idle.TiersUnlocked} cadence={idle.Cadence:0.0} upg={string.Join("/", idle.UpgradeLevels)} " +
                  $"jetons={idle.Jetons}/{idle.JetonsEarnedTotal} shoe={idle.ShoeId} unlocked={idle.UnlockedShoes}");
     }
 

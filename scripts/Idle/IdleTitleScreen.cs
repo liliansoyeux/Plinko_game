@@ -63,7 +63,7 @@ public partial class IdleTitleScreen : Node2D
 
         string stats = hasProgress
             ? $"{Big.Format(idle.Coins)} pièces   ·   {idle.Jetons} jetons   ·   {idle.Prestiges} changement(s) de chaussures   ·   gains totaux {Big.Format(idle.LifetimeEarned)}"
-            : "Lâche des billes, achète-en de meilleures, automatise tout… et collectionne les chaussures.";
+            : "Lâche des billes, forge-les en or puis en diamant, automatise tout… et collectionne les chaussures.";
         var statsLabel = Ui.Label(stats, 16, Pal.TextDim, Fonts.Regular, HorizontalAlignment.Center);
         statsLabel.Position = new Vector2(0f, 820f);
         statsLabel.Size = new Vector2(1500f, 24f);

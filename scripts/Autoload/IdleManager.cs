@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Plinko;
 
-// The whole incremental economy: coins, balls owned, upgrades, prestige (shoes + jetons),
+// The whole incremental economy: coins, the forged ball tier, upgrades, prestige (shoes + jetons),
 // skill tree, golden-chest frenzy, auto-buy, offline earnings and saving. Knows nothing
 // about nodes on screen; the board and UI read from it and listen to its events.
 public partial class IdleManager : Node
@@ -17,7 +17,6 @@ public partial class IdleManager : Node
     public event Action<string, string, Color> Announce;
     public event Action<AchievementDef> AchievementUnlocked;
 
-    public const int StartingBalls = 25;
     public const int SlotCount = 13;
     public const double StartingCoins = 50;
     private const double AutosaveSeconds = 15.0;
@@ -27,12 +26,10 @@ public partial class IdleManager : Node
     // ---- current run
     public double Coins { get; private set; }
     public double RunEarned { get; private set; }
-    // Consumable stock: a ball is spent when it drops and destroyed when it lands.
-    public double[] Stock { get; private set; } = new double[BallTiers.All.Length];
+    // The forge: balls are free and endless, and the one ball type in use is upgraded tier by
+    // tier (basic -> silver -> gold ...). TiersUnlocked - 1 is the current tier.
     public int TiersUnlocked { get; private set; } = 1;
-    // Balls bought this run, per tier: every purchase makes the next ball of that tier a
-    // little dearer, for good (reset only by a prestige).
-    public double[] Bought { get; private set; } = new double[BallTiers.All.Length];
+    public int BallTier => TiersUnlocked - 1;
     public int[] UpgradeLevels { get; private set; } = new int[Upgrades.All.Length];
     public List<Vector2I> PortalCells { get; } = new();
     public int PendingPortals { get; private set; }
@@ -47,7 +44,6 @@ public partial class IdleManager : Node
     private readonly Dictionary<string, int> _skills = new();
     private readonly HashSet<string> _achievements = new();
     private double _achievementTimer;
-    public bool AutoBuyBalls { get; set; } = true;    // auto-restock toggle
     public double LifetimeBallsDropped { get; private set; }
     public bool AutoBuyUpgrades { get; set; } = true;
 
@@ -93,8 +89,6 @@ public partial class IdleManager : Node
     // The "+1 Rangée" upgrade is retired: the board always has the base row count.
     public int Rows => Upgrades.BaseRows;
     public bool HasAutoDropper => Level(IdleUpgrade.AutoDropper) > 0;
-    public bool HasAutoRestock => Level(IdleUpgrade.AutoRestock) > 0;
-    public double TotalStock { get { double t = 0; foreach (double b in Stock) t += b; return t; } }
 
     // Balls per second released by the auto-dropper.
     public double Cadence => HasAutoDropper
@@ -154,63 +148,13 @@ public partial class IdleManager : Node
 
     // ================================================================ costs & purchases
 
-    // Price of the next ball of a tier: base * (1 + bought/PriceScale)^PricePower, rising for
-    // good (reset only by a prestige): x2.3 after 1,000 balls, x6 after 4,000, so each tier
-    // stops paying off at some point and pushes you to unlock the next one.
-    private const double PriceScale = 1000.0;
-    private const double PricePower = 1.2;
+    public double TierUnlockCost(int tier) =>
+        BallTiers.All[tier].ForgeCost * CostMultiplier * (1.0 - 0.1 * SkillLevel("a_balls"));
 
-    // Out of stock, the machine drops free grey balls worth a tenth of a basic ball: the
-    // game never locks, but they're no way to get rich.
-    public const double FreeBallValue = 0.1;
+    public bool CanForge => TiersUnlocked < BallTiers.All.Length;
 
-    private static double TierValue(int tier, bool free) => BallTiers.All[tier].Value * (free ? FreeBallValue : 1.0);
-
-    private double BasePrice(int tier) =>
-        BallTiers.All[tier].Price * CostMultiplier * (1.0 - 0.1 * SkillLevel("a_balls"));
-
-    // Antiderivative of the price curve, so buying `a` balls at once costs F(n+a) - F(n).
-    private double PriceIntegral(int tier, double n) =>
-        BasePrice(tier) * PriceScale / (PricePower + 1.0) * Math.Pow(1.0 + n / PriceScale, PricePower + 1.0);
-
-    public double BallPrice(int tier) => BasePrice(tier) * Math.Pow(1.0 + Bought[tier] / PriceScale, PricePower);
-
-    // Rough average payout of one ball of a tier (slots weighted evenly).
-    public double ExpectedBallValue(int tier)
-    {
-        double sum = 0;
-        var slots = SlotMultipliers();
-        foreach (double m in slots) sum += m;
-        return BallTiers.All[tier].Value * sum / slots.Length * GlobalMultiplier;
-    }
-
-    public double BallCost(int tier, double amount) =>
-        PriceIntegral(tier, Bought[tier] + amount) - PriceIntegral(tier, Bought[tier]);
-
-    public double MaxAffordableBalls(int tier)
-    {
-        double k = BasePrice(tier) * PriceScale / (PricePower + 1.0);
-        double target = (PriceIntegral(tier, Bought[tier]) + Coins) / k;
-        double reach = PriceScale * (Math.Pow(target, 1.0 / (PricePower + 1.0)) - 1.0);
-        return Math.Max(0, Math.Floor(reach - Bought[tier]));
-    }
-
-    public bool BuyBalls(int tier, double amount)
-    {
-        amount = Math.Floor(amount);
-        if (amount <= 0 || tier >= TiersUnlocked) return false;
-        double cost = BallCost(tier, amount);
-        if (cost > Coins) return false;
-        Coins -= cost;
-        Stock[tier] += amount;
-        Bought[tier] += amount;
-        // Income is shown net of ball purchases: that's the real profit of the machine.
-        _buckets[_bucket] -= cost;
-        Changed?.Invoke();
-        return true;
-    }
-
-    public double TierUnlockCost(int tier) => BallTiers.All[tier].UnlockCost * CostMultiplier;
+    // Forges the next ball tier: every ball dropped from now on is of that tier.
+    public bool Forge() => CanForge && UnlockTier(TiersUnlocked);
 
     public bool UnlockTier(int tier)
     {
@@ -223,22 +167,8 @@ public partial class IdleManager : Node
         return true;
     }
 
-    // Takes up to `count` balls of the best tier in stock for one drop; with an empty stock,
-    // free balls instead.
-    public (int tier, double taken, bool free) TakeForDrop(double count)
-    {
-        for (int t = TiersUnlocked - 1; t >= 0; t--)
-        {
-            if (Stock[t] >= 1)
-            {
-                double taken = Math.Min(Math.Floor(Stock[t]), Math.Max(1, Math.Floor(count)));
-                Stock[t] -= taken;
-                LifetimeBallsDropped += taken;
-                return (t, taken, false);
-            }
-        }
-        return (0, Math.Max(1, Math.Floor(count)), true);
-    }
+    // Balls are free: a drop is always of the current tier.
+    public void CountDrop(double count) => LifetimeBallsDropped += count;
 
     public bool IsMaxed(IdleUpgrade id) => Upgrades.Get(id).Retired || Level(id) >= Upgrades.Get(id).MaxLevel;
 
@@ -293,18 +223,18 @@ public partial class IdleManager : Node
     }
 
     // A ball landed: returns the payout and whether it was a critical hit.
-    public (double payout, bool crit) Land(int tier, double stack, double slotMultiplier, bool free = false)
+    public (double payout, bool crit) Land(int tier, double stack, double slotMultiplier)
     {
         bool crit = GD.Randf() < CritChance;
-        double payout = TierValue(tier, free) * stack * slotMultiplier * GlobalMultiplier * (crit ? CritMultiplier : 1.0);
+        double payout = BallTiers.All[tier].Value * stack * slotMultiplier * GlobalMultiplier * (crit ? CritMultiplier : 1.0);
         Earn(payout);
         return (payout, crit);
     }
 
-    public double PegHit(int tier, double stack, bool free = false)
+    public double PegHit(int tier, double stack)
     {
         if (PegFraction <= 0) return 0;
-        double payout = TierValue(tier, free) * stack * PegFraction * GlobalMultiplier;
+        double payout = BallTiers.All[tier].Value * stack * PegFraction * GlobalMultiplier;
         Earn(payout);
         return payout;
     }
@@ -376,15 +306,11 @@ public partial class IdleManager : Node
         double[] startCoins = { StartingCoins, 500, 50_000, 5_000_000 };
         Coins = startCoins[Math.Min(3, SkillLevel("e_start"))];
         RunEarned = 0;
-        Stock = new double[BallTiers.All.Length];
-        Stock[0] = StartingBalls;
-        Bought = new double[BallTiers.All.Length];
         TiersUnlocked = 1;
         UpgradeLevels = new int[Upgrades.All.Length];
         if (SkillLevel("a_auto") > 0)
         {
             UpgradeLevels[(int)IdleUpgrade.AutoDropper] = 1;
-            UpgradeLevels[(int)IdleUpgrade.AutoRestock] = 1;
         }
         PortalCells.Clear();
         PendingPortals = SkillLevel("e_portal") > 0 ? 1 : 0;
@@ -418,7 +344,6 @@ public partial class IdleManager : Node
         if (node.Id == "a_auto")
         {
             UpgradeLevels[(int)IdleUpgrade.AutoDropper] = 1;
-            UpgradeLevels[(int)IdleUpgrade.AutoRestock] = 1;
         }
         if (node.Id == "f_edges")
         {
@@ -514,10 +439,6 @@ public partial class IdleManager : Node
     private void AutoBuy()
     {
         bool bought = false;
-        if (HasAutoRestock && AutoBuyBalls)
-        {
-            bought |= Restock();
-        }
         if (SkillLevel("a_upgrades") > 0 && AutoBuyUpgrades)
         {
             for (int i = 0; i < 5 && BuyCheapestUpgrade(); i++)
@@ -529,36 +450,6 @@ public partial class IdleManager : Node
         {
             Changed?.Invoke();
         }
-    }
-
-    // Keeps about 20 seconds of dropping in stock, buying the best tier it can afford
-    // (falling back to cheaper tiers when the best one is out of reach).
-    public bool Restock()
-    {
-        double target = Math.Max(30, Cadence * 20);
-        if (TotalStock >= target) return false;
-        // Buy whichever tier gives the most value per coin at today's market prices.
-        var order = new List<int>();
-        for (int t = 0; t < TiersUnlocked; t++) order.Add(t);
-        order.Sort((a, b) => (BallTiers.All[b].Value / BallPrice(b)).CompareTo(BallTiers.All[a].Value / BallPrice(a)));
-        foreach (int t in order)
-        {
-            // Balls dearer than what they pay back aren't worth it: free balls do better.
-            if (BallPrice(t) > ExpectedBallValue(t)) continue;
-            // Never spend more than half the bank on stock: upgrades need coins too.
-            double half = Coins * 0.5;
-            double affordable = Math.Floor(half / BallPrice(t));
-            double amount = Math.Min(affordable, target - TotalStock);
-            while (amount >= 1 && BallCost(t, amount) > half)
-            {
-                amount = Math.Floor(amount * 0.8);
-            }
-            if (amount >= 1 && BuyBalls(t, amount))
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     public bool BuyCheapestUpgrade()
@@ -585,9 +476,7 @@ public partial class IdleManager : Node
         var f = SaveData.File;
         f.SetValue("run", "coins", Coins);
         f.SetValue("run", "earned", RunEarned);
-        f.SetValue("run", "stock", string.Join(",", Array.ConvertAll(Stock, v => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
         f.SetValue("run", "tiers", TiersUnlocked);
-        f.SetValue("run", "bought", string.Join(",", Array.ConvertAll(Bought, v => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
         f.SetValue("run", "upgrades", string.Join(",", UpgradeLevels));
         var portals = new List<string>();
         foreach (var c in PortalCells) portals.Add($"{c.X}:{c.Y}");
@@ -601,7 +490,6 @@ public partial class IdleManager : Node
         f.SetValue("meta", "prestiges", Prestiges);
         f.SetValue("meta", "shoe", ShoeId);
         f.SetValue("meta", "unlocked_shoes", UnlockedShoes);
-        f.SetValue("meta", "autobuy_balls", AutoBuyBalls);
         f.SetValue("meta", "autobuy_upgrades", AutoBuyUpgrades);
         f.SetValue("meta", "last_income", IncomePerSecond);
         f.SetValue("meta", "last_save", Time.GetUnixTimeFromSystem());
@@ -633,17 +521,7 @@ public partial class IdleManager : Node
 
         Coins = (double)f.GetValue("run", "coins", 0.0);
         RunEarned = (double)f.GetValue("run", "earned", 0.0);
-        var stock = ((string)f.GetValue("run", "stock", "")).Split(',', StringSplitOptions.RemoveEmptyEntries);
-        for (int i = 0; i < Stock.Length && i < stock.Length; i++)
-        {
-            double.TryParse(stock[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out Stock[i]);
-        }
         TiersUnlocked = Math.Clamp((int)f.GetValue("run", "tiers", 1), 1, BallTiers.All.Length);
-        var bought = ((string)f.GetValue("run", "bought", "")).Split(',', StringSplitOptions.RemoveEmptyEntries);
-        for (int i = 0; i < Bought.Length && i < bought.Length; i++)
-        {
-            double.TryParse(bought[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out Bought[i]);
-        }
         ParseInts((string)f.GetValue("run", "upgrades", ""), UpgradeLevels);
         foreach (var part in ((string)f.GetValue("run", "portals", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -662,7 +540,6 @@ public partial class IdleManager : Node
         Prestiges = (int)f.GetValue("meta", "prestiges", 0);
         ShoeId = (string)f.GetValue("meta", "shoe", Characters.Classic.Id);
         UnlockedShoes = Math.Clamp((int)f.GetValue("meta", "unlocked_shoes", 1), 1, Characters.All.Count);
-        AutoBuyBalls = (bool)f.GetValue("meta", "autobuy_balls", true);
         AutoBuyUpgrades = (bool)f.GetValue("meta", "autobuy_upgrades", true);
         foreach (var id in ((string)f.GetValue("meta", "achievements", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -705,7 +582,7 @@ public partial class IdleManager : Node
         Prestiges = 0;
         ShoeId = Characters.Classic.Id;
         UnlockedShoes = 1;
-        AutoBuyBalls = AutoBuyUpgrades = true;
+        AutoBuyUpgrades = true;
         ResetRun();
         Save();
     }

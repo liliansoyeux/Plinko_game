@@ -4,8 +4,8 @@ using System.Collections.Generic;
 
 namespace Plinko;
 
-// The incremental Plinko board. Balls are consumables taken from IdleManager's stock: each
-// drop (click or auto-dropper) spends one, it lands, pays out and is destroyed. To keep
+// The incremental Plinko board. Balls are free and endless, always of the tier forged in
+// IdleManager: each drop (click or auto-dropper) lands, pays out and is destroyed. To keep
 // physics cheap at high cadence, one physical ball can carry a bundle of balls (its Stack)
 // and pays for all of them.
 public partial class IdleBoard : Node2D, IPlacementBoard
@@ -213,7 +213,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         }
         slot.Pulse();
         LandingCounts[_slotList.IndexOf(slot)]++;
-        var (payout, crit) = IdleManager.Instance.Land(ball.Tier, ball.Stack, slot.Multiplier, ball.IsFree);
+        var (payout, crit) = IdleManager.Instance.Land(ball.Tier, ball.Stack, slot.Multiplier);
         Landed?.Invoke(slot, ball, payout, crit);
         ball.Settle();
     }
@@ -279,14 +279,13 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         ball.LinearVelocity = new Vector2(-side, velocity.Y);
         int tier = ball.Tier;
         double stack = ball.Stack;
-        bool free = ball.IsFree;
         float radius = ball.Radius;
 
         // Spawned deferred: we're inside a physics callback.
         Callable.From(() =>
         {
             if (!IsInstanceValid(this) || !IsInsideTree()) return;
-            var twin = Spawn(tier, stack, true, free, origin + new Vector2(radius * 0.6f, 0f), new Vector2(side, velocity.Y));
+            var twin = Spawn(tier, stack, true, origin + new Vector2(radius * 0.6f, 0f), new Vector2(side, velocity.Y));
             twin.PortalsUsed.UnionWith(used);
             BallDuplicated?.Invoke(ToGlobal(origin));
         }).CallDeferred();
@@ -300,10 +299,13 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         {
             return false;
         }
-        var (tier, taken, free) = IdleManager.Instance.TakeForDrop(count);
+        // Balls are free and endless: always the currently forged tier.
+        double taken = Math.Max(1, Math.Floor(count));
+        int tier = IdleManager.Instance.BallTier;
+        IdleManager.Instance.CountDrop(taken);
         // Auto drops appear just above the first row, a little randomly in height too.
         float y = launcher ? LauncherY + _s * 0.2f : _top - _s * (0.5f + (float)GD.Randf() * 0.4f);
-        Spawn(tier, taken, false, free, new Vector2(x, y), new Vector2((float)GD.RandRange(-12.0, 12.0), 40f));
+        Spawn(tier, taken, false, new Vector2(x, y), new Vector2((float)GD.RandRange(-12.0, 12.0), 40f));
         if (launcher)
         {
             _launcherPulse = 1f;
@@ -321,7 +323,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         return dropped;
     }
 
-    private Ball Spawn(int tier, double stack, bool twin, bool free, Vector2 position, Vector2 velocity)
+    private Ball Spawn(int tier, double stack, bool twin, Vector2 position, Vector2 velocity)
     {
         // Small enough (max ~15.4 across at tier 5) to fit the 18-wide gap between a wall and
         // the outermost peg of a row.
@@ -333,7 +335,6 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             Tier = tier,
             Stack = stack,
             IsTwin = twin,
-            IsFree = free,
             Position = position,
             LinearVelocity = velocity,
         };
@@ -344,9 +345,8 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         return ball;
     }
 
-    private void OnBallPegHit(Ball ball) => IdleManager.Instance.PegHit(ball.Tier, ball.Stack, ball.IsFree);
+    private void OnBallPegHit(Ball ball) => IdleManager.Instance.PegHit(ball.Tier, ball.Stack);
 
-    // The ball is spent: nothing goes back to the stock.
     private void OnBallRemoved(Ball ball) => _inFlight = Math.Max(0, _inFlight - 1);
 
     public void AimAtGlobal(Vector2 global) => _aimTargetX = Mathf.Clamp(ToLocal(global).X, AimMin, AimMax);
@@ -452,7 +452,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         {
             return;
         }
-        bool ready = IdleManager.Instance.TotalStock >= 1;
+        const bool ready = true;
         var color = ready ? Pal.Cyan : new Color(0.4f, 0.38f, 0.45f);
         float pulse = 0.5f + 0.5f * Mathf.Sin(_time * 5f);
         if (ready)

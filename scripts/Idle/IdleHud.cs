@@ -91,18 +91,19 @@ public partial class IdleHudCanvas : Control
             DrawLine(new Vector2(x, m.Position.Y + 16f), new Vector2(x, m.End.Y - 16f), Pal.Alpha(Pal.Gold, 0.25f), 1.5f);
         }
 
-        // Balls ready / owned.
-        bool empty = idle.TotalStock < 1;
-        Paint.TextCentered(this, bold, new Vector2(148f, midY - 22f), "STOCK DE BILLES", 14, Pal.Alpha(empty ? Pal.Red : Pal.Pink, 0.9f));
-        Paint.TextCentered(this, black, new Vector2(148f, midY + 2f), Big.Format(idle.TotalStock), 34, Pal.Hdr(empty ? Pal.Red : Pal.Text, 1.1f), 4);
-        string rate = idle.HasAutoDropper ? $"{Big.Format(idle.Cadence)} billes/s" : "clique pour lâcher";
-        Paint.TextCentered(this, bold, new Vector2(148f, midY + 26f), empty ? "billes grises gratuites" : rate, 12, empty ? Pal.Red : Pal.TextDim);
+        // Current forged ball.
+        var ball = BallTiers.All[idle.BallTier];
+        var ballGlow = idle.BallTier == 5 ? Pal.Prismatic(_time) : ball.Glow;
+        Paint.TextCentered(this, bold, new Vector2(148f, midY - 22f), "TA BILLE", 14, Pal.Alpha(Pal.Pink, 0.9f));
+        Paint.TextCentered(this, black, new Vector2(148f, midY + 2f), ball.Name.Replace("Bille d'", "").Replace("Bille de ", "").Replace("Bille ", "").ToUpper(), 26, Pal.Hdr(ballGlow, 1.1f), 4);
+        string rate = idle.HasAutoDropper ? $"x{Big.Format(ball.Value)} · {Big.Format(idle.Cadence)} billes/s" : $"x{Big.Format(ball.Value)} · clique pour lâcher";
+        Paint.TextCentered(this, bold, new Vector2(148f, midY + 26f), rate, 12, Pal.TextDim);
 
         // Income.
         bool frenzy = idle.FrenzyTimeLeft > 0;
         var incomeColor = frenzy ? Pal.Prismatic(_time) : Pal.Gold;
         if (_shownIncome < 0 && !frenzy) incomeColor = Pal.Red;
-        Paint.TextCentered(this, bold, new Vector2(450f, midY - 26f), frenzy ? "BÉNÉFICE · FRÉNÉSIE x7" : "BÉNÉFICE NET", 14, Pal.Alpha(incomeColor, 0.95f));
+        Paint.TextCentered(this, bold, new Vector2(450f, midY - 26f), frenzy ? "GAINS · FRÉNÉSIE x7" : "GAINS", 14, Pal.Alpha(incomeColor, 0.95f));
         Paint.TextCentered(this, black, new Vector2(450f, midY + 2f), $"{(_shownIncome >= 0 ? "+" : "")}{Big.Format(_shownIncome)} /s", 34, Pal.Hdr(incomeColor, 1.25f), 4);
         Paint.TextCentered(this, bold, new Vector2(450f, midY + 26f), $"multiplicateur global x{Big.Format(idle.GlobalMultiplier)}", 12, Pal.TextDim);
 

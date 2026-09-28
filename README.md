@@ -13,7 +13,7 @@ Jeu incrémental (idle) de Plinko en Godot 4.7 / C#, inspiré de Cookie Clicker,
 ## Boucle de jeu
 
 - **Pièces.** Chaque bille qui tombe dans une case rapporte *valeur de la bille × multiplicateur de la case × bonus*. Les cases sont symétriques : faibles au centre, énormes sur les bords. Viser compte.
-- **Billes** (onglet *Billes*) : 6 types — Bille, Argent, Or, Diamant, Rubis, Cosmique. Chaque type vaut ~12× le précédent. Le prix augmente de 15 % à chaque achat, et on peut acheter par x1 / x10 / x100 / MAX. Chaque bille possédée retombe en boucle après une **recharge**. Au-delà de 24 billes d'un même type, chaque bille à l'écran en représente plusieurs, pour préserver les performances.
+- **Forge** (onglet *Forge*) : les billes sont gratuites et infinies. On forge sa bille palier par palier — Bille, Argent, Or, Diamant, Rubis, Cosmique — et chaque palier la fait rapporter 8× plus. Le **Polissage** (x1,2 par niveau) augmente sa valeur entre deux paliers. Au-delà de 24 billes lâchées par seconde, chaque bille à l'écran en représente plusieurs, pour préserver les performances.
 - **Améliorations** (onglet *Améliorations*) :
   - distributeur automatique ;
   - recharge rapide ;
@@ -28,7 +28,7 @@ Jeu incrémental (idle) de Plinko en Godot 4.7 / C#, inspiré de Cookie Clicker,
 
 ## Prestige : les chaussures
 
-- L'onglet *Chaussures* permet de **recommencer à zéro** (pièces, billes, améliorations) contre des **jetons**. Le nombre de jetons suit la racine cubique des gains de la partie, multipliée par le bonus des chaussures.
+- L'onglet *Chaussures* permet de **recommencer à zéro** (pièces, bille forgée, améliorations) contre des **jetons**. Le nombre de jetons suit la racine cubique des gains de la partie, multipliée par le bonus des chaussures.
 - Les **chaussures sont des niveaux de difficulté** débloqués petit à petit. Chaque paire se débloque en gagnant assez dans une seule partie avec la paire précédente :
 
 | Chaussures | Contraintes | Jetons | Déblocage |
@@ -46,7 +46,7 @@ Jeu incrémental (idle) de Plinko en Godot 4.7 / C#, inspiré de Cookie Clicker,
 L'arbre se paie en jetons et ses bonus sont permanents. Il a 3 branches de 4 nœuds :
 
 - **Fortune** : revenus, critiques, clous, puis *Bords dorés* (cases extrêmes x3).
-- **Automatisation** : distributeur offert, **Majordome** (achat automatique des billes), **Intendant** (achat automatique des améliorations), gains hors-ligne.
+- **Automatisation** : distributeur offert, **Forgeron** (forger coûte moins cher), **Intendant** (achat automatique des améliorations), gains hors-ligne.
 - **Économie** : prix réduits, capital de départ, coffres en or, puis *Portail permanent*.
 
 ## Organisation du code
@@ -56,7 +56,7 @@ L'arbre se paie en jetons et ses bonus sont permanents. Il a 3 branches de 4 nœ
 | `scripts/Autoload/IdleManager.cs` | Toute l'économie : coûts, gains, prestige, compétences, frénésie, achat auto, hors-ligne, sauvegarde |
 | `scripts/Data/IdleDefs.cs` | Types de billes, améliorations, arbre de compétences |
 | `scripts/Data/CharacterDef.cs` | Chaussures = difficultés |
-| `scripts/Board/IdleBoard.cs` | Plateau : réserve de billes, recharge, distributeur, portails, coffre en or |
+| `scripts/Board/IdleBoard.cs` | Plateau : distributeur, portails, coffre en or |
 | `scripts/Idle/` | Écrans (titre, jeu), boutique, HUD de la borne, arbre de compétences |
 | `scripts/Visuals/`, `scripts/UI/Style.cs` | Décor, borne, chaussures, effets, style commun |
 | `scripts/Debug/AutoPilot.cs` | Bot de test et d'équilibrage |

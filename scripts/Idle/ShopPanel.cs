@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Plinko;
 
-// Right-hand shop: balls, upgrades, shoes (prestige) and the skill tree entry point.
+// Right-hand shop: the ball forge, upgrades, shoes (prestige) and the skill tree entry point.
 public partial class ShopPanel : CanvasLayer
 {
     public const float PanelX = 900f;
@@ -24,9 +24,6 @@ public partial class ShopPanel : CanvasLayer
     private readonly List<Button> _tabButtons = new();
     private readonly List<IShopRow> _rows = new();
     private double _refreshTimer;
-
-    // Buy amount for balls: 1, 10, 100 or -1 for "max".
-    public int BuyAmount { get; private set; } = 1;
 
     public override void _Ready()
     {
@@ -54,7 +51,7 @@ public partial class ShopPanel : CanvasLayer
         var tabs = new HBoxContainer { Position = new Vector2(16f, 118f), Size = new Vector2(568f, 48f) };
         tabs.AddThemeConstantOverride("separation", 6);
         root.AddChild(tabs);
-        foreach (var (tab, label) in new[] { (Tab.Balls, "Billes"), (Tab.Upgrades, "Améliorations"), (Tab.Shoes, "Chaussures"), (Tab.Skills, "Compétences") })
+        foreach (var (tab, label) in new[] { (Tab.Balls, "Forge"), (Tab.Upgrades, "Améliorations"), (Tab.Shoes, "Chaussures"), (Tab.Skills, "Compétences") })
         {
             var button = new Button { Text = label, CustomMinimumSize = new Vector2(0f, 44f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, FocusMode = Control.FocusModeEnum.None };
             button.AddThemeFontSizeOverride("font_size", 16);
@@ -86,15 +83,12 @@ public partial class ShopPanel : CanvasLayer
     private int _visibleTiers;
     private int _unlockedShoesShown;
 
-    // New ball tiers / shoes appearing need a rebuild; everything else is a cheap refresh.
+    // Forging a tier / new shoes need a rebuild; everything else is a cheap refresh.
     private void RequestRebuildIfNeeded()
     {
-        if (_tab == Tab.Balls && VisibleTierCount() != _visibleTiers) Rebuild();
+        if (_tab == Tab.Balls && IdleManager.Instance.TiersUnlocked != _visibleTiers) Rebuild();
         if (_tab == Tab.Shoes && IdleManager.Instance.UnlockedShoes != _unlockedShoesShown) Rebuild();
     }
-
-    private static int VisibleTierCount() =>
-        Math.Min(BallTiers.All.Length, IdleManager.Instance.TiersUnlocked + 1);
 
     public void SelectTabIndex(int index) => SelectTab((Tab)index);
 
@@ -122,20 +116,17 @@ public partial class ShopPanel : CanvasLayer
         switch (_tab)
         {
             case Tab.Balls:
-                _list.AddChild(BuildAmountBar());
-                _list.AddChild(Note("Chaque bille achetée tombe une seule fois puis disparaît. Chaque achat fait monter le prix de ce type de bille, jusqu'à la prochaine paire de chaussures. Stock vide ? La machine lâche des billes grises gratuites, qui rapportent 10 fois moins qu'une bille classique."));
-                if (idle.HasAutoRestock)
+                _list.AddChild(Note("Tes billes sont gratuites et infinies. Forge la bille suivante pour que chaque bille rapporte 8 fois plus, et polis-la entre deux paliers."));
+                _visibleTiers = idle.TiersUnlocked;
+                Add(new BallRow { Tier = idle.BallTier });
+                if (idle.CanForge)
                 {
-                    _list.AddChild(AutoToggle("Réapprovisionnement automatique", idle.AutoBuyBalls, v => idle.AutoBuyBalls = v));
+                    Add(new BallRow { Tier = idle.TiersUnlocked });
                 }
-                _visibleTiers = VisibleTierCount();
-                for (int t = 0; t < _visibleTiers; t++)
+                Add(new UpgradeRow { Def = Upgrades.Get(IdleUpgrade.Value) });
+                if (idle.TiersUnlocked + 1 < BallTiers.All.Length)
                 {
-                    Add(new BallRow { Tier = t, Panel = this });
-                }
-                if (_visibleTiers < BallTiers.All.Length)
-                {
-                    _list.AddChild(Note("Débloque un type de bille pour découvrir le suivant."));
+                    _list.AddChild(Note("Forge ce palier pour découvrir le suivant."));
                 }
                 break;
 
@@ -146,7 +137,7 @@ public partial class ShopPanel : CanvasLayer
                 }
                 foreach (var def in Upgrades.All)
                 {
-                    if (!def.Retired)
+                    if (!def.Retired && def.Id != IdleUpgrade.Value)
                     {
                         Add(new UpgradeRow { Def = def });
                     }
@@ -185,23 +176,6 @@ public partial class ShopPanel : CanvasLayer
     {
         _list.AddChild(row);
         if (row is IShopRow r) _rows.Add(r);
-    }
-
-    private Control BuildAmountBar()
-    {
-        var bar = new HBoxContainer();
-        bar.AddThemeConstantOverride("separation", 6);
-        bar.AddChild(Ui.Label("Acheter :", 16, Pal.TextDim, Fonts.Bold));
-        foreach (int amount in new[] { 1, 10, 100, -1 })
-        {
-            var button = new Button { Text = amount < 0 ? "MAX" : $"x{amount}", CustomMinimumSize = new Vector2(80f, 38f), FocusMode = Control.FocusModeEnum.None };
-            button.AddThemeFontSizeOverride("font_size", 16);
-            if (amount == BuyAmount) button.AddThemeColorOverride("font_color", Pal.Gold);
-            int captured = amount;
-            button.Pressed += () => { BuyAmount = captured; Sfx.Play(Sound.Click); Rebuild(); };
-            bar.AddChild(button);
-        }
-        return bar;
     }
 
     private static Control AutoToggle(string text, bool value, Action<bool> set)
@@ -323,7 +297,6 @@ public abstract partial class ShopRowBase : Control, IShopRow
 public partial class BallRow : ShopRowBase
 {
     public int Tier;
-    public ShopPanel Panel;
     private float _time;
 
     public override void _Ready()
@@ -340,16 +313,9 @@ public partial class BallRow : ShopRowBase
 
     private bool Locked => Tier >= IdleManager.Instance.TiersUnlocked;
 
-    private double Amount()
-    {
-        var idle = IdleManager.Instance;
-        return Panel.BuyAmount < 0 ? Math.Max(1, idle.MaxAffordableBalls(Tier)) : Panel.BuyAmount;
-    }
-
     protected override void OnBuy()
     {
-        var idle = IdleManager.Instance;
-        bool ok = Locked ? idle.UnlockTier(Tier) : idle.BuyBalls(Tier, Amount());
+        bool ok = Locked && IdleManager.Instance.Forge();
         Sfx.Play(ok ? Sound.Pick : Sound.Click, ok ? 0.9f + Tier * 0.08f : 0.6f, ok ? -4f : 0f);
     }
 
@@ -357,23 +323,20 @@ public partial class BallRow : ShopRowBase
     {
         var idle = IdleManager.Instance;
         var def = BallTiers.All[Tier];
-        double price = idle.BallPrice(Tier);
         double each = def.Value * idle.GlobalMultiplier;
         if (Locked)
         {
-            double unlock = idle.TierUnlockCost(Tier);
-            Title.Text = $"{def.Name}  (à débloquer)";
-            Info.Text = $"Vaut {Big.Format(each)} x la case, pour {Big.Format(price)} la bille : bien plus rentable.";
-            Buy.Text = $"Débloquer\n{Big.Format(unlock)}";
-            Buy.Disabled = unlock > idle.Coins;
+            double cost = idle.TierUnlockCost(Tier);
+            Title.Text = $"Forger : {def.Name}";
+            Info.Text = $"Chaque bille rapportera {Big.Format(each)} x la case, au lieu de {Big.Format(BallTiers.All[Tier - 1].Value * idle.GlobalMultiplier)}.";
+            Buy.Text = $"Forger\n{Big.Format(cost)}";
+            Buy.Disabled = cost > idle.Coins;
             return;
         }
-        double amount = Amount();
-        double cost = idle.BallCost(Tier, amount);
-        Title.Text = $"{def.Name}  ·  stock {Big.Format(idle.Stock[Tier])}";
-        Info.Text = $"Prix {Big.Format(price)} (monte un peu à chaque achat)  ·  vaut {Big.Format(each)} x la case.";
-        Buy.Text = $"Acheter x{Big.Format(amount)}\n{Big.Format(cost)}";
-        Buy.Disabled = cost > idle.Coins;
+        Title.Text = $"{def.Name}  ·  ta bille";
+        Info.Text = $"Gratuite et infinie. Rapporte {Big.Format(each)} x la case où elle tombe.";
+        Buy.Text = "Équipée";
+        Buy.Disabled = true;
     }
 
     protected override void DrawIcon(Vector2 center)
@@ -448,7 +411,7 @@ public partial class PrestigeSummary : Control, IShopRow
         _text.Text =
             $"Gains de cette partie : {Big.Format(idle.RunEarned)}\n" +
             $"Changer de chaussures maintenant rapporte {idle.JetonsForPrestige} jeton(s)  (prochain à {Big.Format(idle.NextJetonAt)}).\n" +
-            "Tu repars de zéro (pièces, billes, améliorations) mais tu gardes tes jetons, tes compétences et tes paires débloquées.";
+            "Tu repars de zéro (pièces, bille forgée, améliorations) mais tu gardes tes jetons, tes compétences et tes paires débloquées.";
     }
 
     public override void _Draw()
