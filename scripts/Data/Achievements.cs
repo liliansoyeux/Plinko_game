@@ -18,8 +18,8 @@ public static class Achievements
     public static readonly AchievementDef[] All =
     {
         new() { Id = "balls_100", Name = "Poignée de billes", Description = "Lâcher 100 billes.", Condition = m => m.LifetimeBallsDropped >= 100 },
-        new() { Id = "balls_10k", Name = "Collectionneur", Description = "Lâcher 10 000 billes.", Condition = m => m.LifetimeBallsDropped >= 1e4 },
-        new() { Id = "balls_1m", Name = "Avalanche", Description = "Lâcher 1 million de billes.", Condition = m => m.LifetimeBallsDropped >= 1e6 },
+        new() { Id = "balls_10k", Name = "Collectionneur", Description = "Lâcher 1 000 billes.", Condition = m => m.LifetimeBallsDropped >= 1e3 },
+        new() { Id = "balls_1m", Name = "Avalanche", Description = "Lâcher 20 000 billes.", Condition = m => m.LifetimeBallsDropped >= 2e4 },
         new() { Id = "tier_1", Name = "Argentier", Description = "Débloquer les billes d'argent.", Condition = m => m.TiersUnlocked > 1 },
         new() { Id = "tier_2", Name = "Chercheur d'or", Description = "Débloquer les billes d'or.", Condition = m => m.TiersUnlocked > 2 },
         new() { Id = "tier_3", Name = "Diamant brut", Description = "Débloquer les billes de diamant.", Condition = m => m.TiersUnlocked > 3 },
@@ -30,7 +30,7 @@ public static class Achievements
         new() { Id = "earn_1t", Name = "Hors catégorie", Description = "Gagner 1T en une partie.", Condition = m => m.RunEarned >= 1e12 },
         new() { Id = "portal", Name = "Portier", Description = "Poser un portail dédoubleur.", Condition = m => m.PortalCells.Count > 0 },
         new() { Id = "frenzy", Name = "Frénétique", Description = "Déclencher une frénésie.", Condition = m => m.FrenzyTimeLeft > 0 },
-        new() { Id = "prestige", Name = "Nouvelle paire", Description = "Changer de chaussures une première fois.", Condition = m => m.Prestiges > 0 },
+        new() { Id = "prestige", Name = "Nouvelle paire", Description = "Faire un premier prestige.", Condition = m => m.Prestiges > 0 },
         new() { Id = "all_shoes", Name = "Dressing complet", Description = "Débloquer les 5 paires de chaussures.", Condition = m => m.UnlockedShoes >= Characters.All.Count },
     };
 }

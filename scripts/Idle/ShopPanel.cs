@@ -51,7 +51,7 @@ public partial class ShopPanel : CanvasLayer
         var tabs = new HBoxContainer { Position = new Vector2(16f, 118f), Size = new Vector2(568f, 48f) };
         tabs.AddThemeConstantOverride("separation", 6);
         root.AddChild(tabs);
-        foreach (var (tab, label) in new[] { (Tab.Balls, "Forge"), (Tab.Upgrades, "Améliorations"), (Tab.Shoes, "Chaussures"), (Tab.Skills, "Compétences") })
+        foreach (var (tab, label) in new[] { (Tab.Balls, "Forge"), (Tab.Upgrades, "Améliorations"), (Tab.Shoes, "Prestige"), (Tab.Skills, "Compétences") })
         {
             var button = new Button { Text = label, CustomMinimumSize = new Vector2(0f, 44f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, FocusMode = Control.FocusModeEnum.None };
             button.AddThemeFontSizeOverride("font_size", 16);
@@ -146,7 +146,11 @@ public partial class ShopPanel : CanvasLayer
 
             case Tab.Shoes:
                 _unlockedShoesShown = idle.UnlockedShoes;
-                _list.AddChild(new PrestigeSummary());
+                var summary = new PrestigeSummary();
+                summary.PrestigeRequested += () => PrestigeRequested?.Invoke(idle.Shoe);
+                Add(summary);
+                _list.AddChild(Ui.Label("CHANGER DE CHAUSSURES (DIFFICULTÉ)", 17, Pal.Gold, Fonts.Bold));
+                _list.AddChild(Note("Recommencer avec une paire plus dure donne beaucoup plus de jetons. Les paires se débloquent en gagnant assez en une seule partie."));
                 for (int i = 0; i < Characters.All.Count; i++)
                 {
                     var row = new ShoeRow { Index = i };
@@ -156,7 +160,7 @@ public partial class ShopPanel : CanvasLayer
                 break;
 
             case Tab.Skills:
-                _list.AddChild(Note($"Les jetons s'obtiennent en changeant de chaussures (onglet Chaussures). Chaque jeton gagné donne aussi +1% de revenus pour toujours : actuellement x{1.0 + 0.01 * idle.JetonsEarnedTotal:0.00}.".Replace(',', '.')));
+                _list.AddChild(Note($"Les jetons s'obtiennent en recommençant une partie (onglet Prestige). Chaque jeton gagné donne aussi +{IdleManager.BonusPerJeton * 100:0}% de revenus pour toujours : actuellement x{1.0 + IdleManager.BonusPerJeton * idle.JetonsEarnedTotal:0.00}.".Replace(',', '.')));
                 var open = new Button { Text = "Ouvrir l'arbre de compétences", CustomMinimumSize = new Vector2(0f, 64f) };
                 open.AddThemeFontSizeOverride("font_size", 22);
                 open.Pressed += () => { Sfx.Play(Sound.Click); OpenSkillTree?.Invoke(); };
@@ -413,25 +417,75 @@ public partial class UpgradeRow : ShopRowBase
     protected override void DrawIcon(Vector2 center) => UpgradeIcons.Draw(this, center, 30f, Def.Icon, Accent);
 }
 
+// Top of the Prestige tab: what a restart gives, and the big "start over" button (same shoes).
 public partial class PrestigeSummary : Control, IShopRow
 {
+    public event Action PrestigeRequested;
+
     private Label _text;
+    private Button _button;
+    private bool _armed;
+    private double _armedTimer;
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(560f, 118f);
-        _text = Ui.Wrapped("", 15, Pal.Text, Fonts.Regular, HorizontalAlignment.Left, new Vector2(16f, 10f), new Vector2(530f, 100f));
+        CustomMinimumSize = new Vector2(560f, 250f);
+        _text = Ui.Wrapped("", 15, Pal.Text, Fonts.Regular, HorizontalAlignment.Left, new Vector2(16f, 12f), new Vector2(530f, 150f));
         AddChild(_text);
+        _button = new Button { Position = new Vector2(16f, 170f), Size = new Vector2(528f, 66f), FocusMode = FocusModeEnum.None };
+        _button.AddThemeFontSizeOverride("font_size", 20);
+        _button.AddThemeStyleboxOverride("normal", UiTheme.Box(new Color(0.25f, 0.08f, 0.38f), Pal.Purple.Lightened(0.3f), 2, 12, 6));
+        _button.AddThemeStyleboxOverride("hover", UiTheme.Box(new Color(0.34f, 0.12f, 0.5f), Pal.Purple.Lightened(0.5f), 2, 12, 6));
+        _button.AddThemeStyleboxOverride("pressed", UiTheme.Box(new Color(0.34f, 0.12f, 0.5f), Pal.Purple.Lightened(0.5f), 2, 12, 6));
+        _button.AddThemeStyleboxOverride("disabled", UiTheme.Box(new Color(0.1f, 0.07f, 0.13f), new Color(0.35f, 0.3f, 0.4f), 1, 12, 6));
+        _button.AddThemeColorOverride("font_disabled_color", new Color(0.66f, 0.6f, 0.72f));
+        _button.Pressed += OnPressed;
+        AddChild(_button);
         Refresh();
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_armed)
+        {
+            _armedTimer -= delta;
+            if (_armedTimer <= 0)
+            {
+                _armed = false;
+                Refresh();
+            }
+        }
+    }
+
+    private void OnPressed()
+    {
+        if (!_armed)
+        {
+            _armed = true;
+            _armedTimer = 3.0;
+            Sfx.Play(Sound.Click);
+            Refresh();
+            return;
+        }
+        _armed = false;
+        PrestigeRequested?.Invoke();
     }
 
     public void Refresh()
     {
         var idle = IdleManager.Instance;
+        int gain = idle.JetonsForPrestige;
+        double bonusNow = 1.0 + IdleManager.BonusPerJeton * idle.JetonsEarnedTotal;
+        double bonusAfter = 1.0 + IdleManager.BonusPerJeton * (idle.JetonsEarnedTotal + gain);
         _text.Text =
-            $"Gains de cette partie : {Big.Format(idle.RunEarned)}\n" +
-            $"Changer de chaussures maintenant rapporte {idle.JetonsForPrestige} jeton(s)  (prochain à {Big.Format(idle.NextJetonAt)}).\n" +
-            "Tu repars de zéro (pièces, bille forgée, améliorations) mais tu gardes tes jetons, tes compétences et tes paires débloquées.";
+            $"PRESTIGE  ·  gains de cette partie : {Big.Format(idle.RunEarned)}\n" +
+            $"Recommencer maintenant rapporte {gain} jeton(s)  (prochain à {Big.Format(idle.NextJetonAt)}).\n" +
+            $"Revenus pour toujours : x{bonusNow.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} → x{bonusAfter.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}  (+{IdleManager.BonusPerJeton * 100:0}% par jeton), et les jetons se dépensent dans l'arbre de compétences.\n" +
+            "Tu repars de zéro (pièces, bille forgée, améliorations), mais tu gardes jetons, compétences, succès et paires débloquées.";
+        _button.Disabled = gain < 1;
+        _button.Text = gain < 1
+            ? $"Recommencer  ·  1er jeton à {Big.Format(idle.NextJetonAt)}"
+            : _armed ? $"Confirmer ?  (+{gain} jetons)" : $"RECOMMENCER  ·  +{gain} jeton(s)";
     }
 
     public override void _Draw()

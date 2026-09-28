@@ -218,7 +218,7 @@ public partial class IdleHudCanvas : Control
 
         // Ledge gauges.
         double next = idle.NextJetonAt;
-        double previous = idle.JetonsForPrestige <= 0 ? 0 : Math.Pow(idle.JetonsForPrestige / idle.Shoe.JetonMultiplier, 3) * 1e6;
+        double previous = idle.JetonsForPrestige <= 0 ? 0 : Math.Pow(idle.JetonsForPrestige / idle.Shoe.JetonMultiplier, 3) * IdleManager.JetonScale;
         float jetonRatio = (float)Math.Clamp((idle.RunEarned - previous) / Math.Max(1, next - previous), 0, 1);
         DrawGauge(new Rect2(246f, 822f, 196f, 36f), $"JETONS À GAGNER : {idle.JetonsForPrestige}", jetonRatio, Pal.Purple);
 

@@ -344,7 +344,7 @@ public partial class IdleGameScreen : Node2D
         }
         Sfx.Play(Sound.PalierClear);
         IdleManager.Instance.Prestige(shoe);
-        Main.Instance.StartGame($"+{gain} JETONS !", $"Nouvelle partie avec les {shoe.Name}. Ouvre l'arbre de compétences pour les dépenser.");
+        Main.Instance.StartGame($"+{gain} JETONS !", $"Nouvelle partie avec les {shoe.Name}. Dépense tes jetons dans l'onglet Compétences.");
     }
 }
 

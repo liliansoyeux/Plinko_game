@@ -21,7 +21,8 @@ public partial class IdleManager : Node
     public const int SlotCount = 13;
     public const double StartingCoins = 50;
     private const double AutosaveSeconds = 15.0;
-    private const double JetonScale = 1e6;
+    public const double JetonScale = 1e5;     // first jeton at 100K earned in a run
+    public const double BonusPerJeton = 0.03;  // +3% income per jeton ever earned
 
     // ---- current run
     public double Coins { get; private set; }
@@ -111,8 +112,8 @@ public partial class IdleManager : Node
 
     public double CostMultiplier => Shoe.CostMultiplier * (1.0 - 0.05 * SkillLevel("e_cost"));
 
-    // Permanent bonuses: every jeton ever earned (+1%), every pair of shoes unlocked (+50%).
-    public double PrestigeBonus => (1.0 + 0.01 * JetonsEarnedTotal) * (1.0 + 0.5 * (UnlockedShoes - 1));
+    // Permanent bonuses: every jeton ever earned (+3%), every pair of shoes unlocked (+50%).
+    public double PrestigeBonus => (1.0 + BonusPerJeton * JetonsEarnedTotal) * (1.0 + 0.5 * (UnlockedShoes - 1));
 
     public bool HasAchievement(string id) => _achievements.Contains(id);
     public int AchievementCount => _achievements.Count;
@@ -228,7 +229,14 @@ public partial class IdleManager : Node
             _buckets[_bucket] += amount;
         }
         CheckShoeUnlocks();
+        if (!_prestigeAnnounced && JetonsForPrestige >= 1)
+        {
+            _prestigeAnnounced = true;
+            Announce?.Invoke("PRESTIGE DISPONIBLE !", "Onglet Prestige : recommence à zéro contre des jetons (bonus permanents).", Pal.Purple.Lightened(0.3f));
+        }
     }
+
+    private bool _prestigeAnnounced;
 
     // A ball landed: returns the payout and whether it was a critical hit.
     // `pegHits`: pegs touched during the fall, each one adding to the payout (Rebonds en chaîne).
@@ -316,6 +324,7 @@ public partial class IdleManager : Node
         double[] startCoins = { StartingCoins, 500, 50_000, 5_000_000 };
         Coins = startCoins[Math.Min(3, SkillLevel("e_start"))];
         RunEarned = 0;
+        _prestigeAnnounced = false;
         TiersUnlocked = 1;
         UpgradeLevels = new int[Upgrades.All.Length];
         if (SkillLevel("a_auto") > 0)
@@ -549,6 +558,7 @@ public partial class IdleManager : Node
 
         Coins = (double)f.GetValue("run", "coins", 0.0);
         RunEarned = (double)f.GetValue("run", "earned", 0.0);
+        _prestigeAnnounced = JetonsForPrestige >= 1;
         TiersUnlocked = Math.Clamp((int)f.GetValue("run", "tiers", 1), 1, BallTiers.All.Length);
         ParseInts((string)f.GetValue("run", "upgrades", ""), UpgradeLevels);
         foreach (var part in ((string)f.GetValue("run", "portals", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
