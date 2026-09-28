@@ -4,10 +4,9 @@ using System.Collections.Generic;
 
 namespace Plinko;
 
-// The incremental Plinko board. Balls are free and endless, always of the tier forged in
-// IdleManager: each drop (click or auto-dropper) lands, pays out and is destroyed. To keep
-// physics cheap at high cadence, one physical ball can carry a bundle of balls (its Stack)
-// and pays for all of them.
+// The incremental Plinko board. One ball at a time, free and endless, always of the tier
+// forged in IdleManager: it drops (click or auto-dropper), lands, pays out and is destroyed,
+// then the next one can go. Portal twins are the only extra balls.
 public partial class IdleBoard : Node2D, IPlacementBoard
 {
     public Rect2 Area = new(0f, 0f, 800f, 616f);
@@ -19,8 +18,8 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private const float MaxSpacing = 58f;
     private const float RowRatio = 0.9f;
     private const float BaseSpacing = 48f;
-    private const int MaxBallsInFlight = 170;
-    private const double MaxPhysicalDropsPerSecond = 24.0;
+    private const int MaxBallsInFlight = 32;     // portal twins included
+    private const double RelaunchDelay = 0.5;     // auto-dropper pause between two balls
     private const double GoldenChestLifetime = 20.0;
 
     private Node2D _pegs;
@@ -32,7 +31,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private readonly List<Slot> _slotList = new();
     private readonly HashSet<Vector2I> _occupied = new();
 
-    private double _autoDropBudget;
+    private double _relaunchTimer;
     private int _inFlight;
 
     private int _rows = -1;
@@ -82,9 +81,6 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     public float AimRangeMax => AimMax;
     public Vector2 LauncherPosition => new(_aimX, LauncherY);
     public Vector2 InstructionAnchor => new(_cx, LauncherY - _s * 0.15f);
-
-    // Balls carried by each auto-dropped physical ball.
-    public double Bundle => Math.Max(1.0, Math.Ceiling(IdleManager.Instance.Cadence / MaxPhysicalDropsPerSecond));
 
     public override void _Ready()
     {
@@ -293,9 +289,12 @@ public partial class IdleBoard : Node2D, IPlacementBoard
 
     // ---------------------------------------------------------------- dropping
 
+    // Only one ball on the board at a time.
+    public bool BallInPlay => _inFlight > 0;
+
     private bool DropNext(float x, double count, bool launcher = true)
     {
-        if (_inFlight >= MaxBallsInFlight)
+        if (BallInPlay)
         {
             return false;
         }
@@ -334,6 +333,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             Radius = radius,
             Tier = tier,
             Stack = stack,
+            GravityScale = (float)IdleManager.Instance.BallSpeed,
             IsTwin = twin,
             Position = position,
             LinearVelocity = velocity,
@@ -408,20 +408,14 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         _time += (float)delta;
 
         var idle = IdleManager.Instance;
-        if (idle.HasAutoDropper && LauncherActive)
+        if (idle.HasAutoDropper && LauncherActive && !BallInPlay)
         {
-            double bundle = Bundle;
-            _autoDropBudget = Math.Min(bundle * 4, _autoDropBudget + delta * idle.Cadence);
-            while (_autoDropBudget >= bundle)
+            _relaunchTimer += delta * idle.BallSpeed;
+            if (_relaunchTimer >= RelaunchDelay)
             {
-                // Auto drops rain from a random spot above the field, not from the launcher.
-                float x = (float)GD.RandRange(AimMin, AimMax);
-                if (!DropNext(x, bundle, launcher: false))
-                {
-                    _autoDropBudget = Math.Min(_autoDropBudget, bundle);
-                    break;
-                }
-                _autoDropBudget -= bundle;
+                // Auto drops appear at a random spot above the field, not from the launcher.
+                _relaunchTimer = 0;
+                DropNext((float)GD.RandRange(AimMin, AimMax), 1, launcher: false);
             }
         }
 
@@ -452,7 +446,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         {
             return;
         }
-        const bool ready = true;
+        bool ready = !BallInPlay;
         var color = ready ? Pal.Cyan : new Color(0.4f, 0.38f, 0.45f);
         float pulse = 0.5f + 0.5f * Mathf.Sin(_time * 5f);
         if (ready)

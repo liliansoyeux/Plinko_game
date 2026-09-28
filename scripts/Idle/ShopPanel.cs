@@ -116,7 +116,7 @@ public partial class ShopPanel : CanvasLayer
         switch (_tab)
         {
             case Tab.Balls:
-                _list.AddChild(Note("Tes billes sont gratuites et infinies. Forge la bille suivante pour que chaque bille rapporte 8 fois plus, et polis-la entre deux paliers."));
+                _list.AddChild(Note("Ta bille est gratuite et infinie : une seule à la fois sur le plateau. Forge le palier suivant pour qu'elle rapporte 8 fois plus, et polis-la entre deux paliers."));
                 _visibleTiers = idle.TiersUnlocked;
                 Add(new BallRow { Tier = idle.BallTier });
                 if (idle.CanForge)

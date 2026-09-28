@@ -20,7 +20,6 @@ public partial class IdleManager : Node
     public const int SlotCount = 13;
     public const double StartingCoins = 50;
     private const double AutosaveSeconds = 15.0;
-    private const double BaseCadence = 2.0;   // balls per second from the dropper
     private const double JetonScale = 1e6;
 
     // ---- current run
@@ -90,10 +89,9 @@ public partial class IdleManager : Node
     public int Rows => Upgrades.BaseRows;
     public bool HasAutoDropper => Level(IdleUpgrade.AutoDropper) > 0;
 
-    // Balls per second released by the auto-dropper.
-    public double Cadence => HasAutoDropper
-        ? BaseCadence * Math.Pow(1.25, Level(IdleUpgrade.Cadence)) * (1.0 + 0.15 * SkillLevel("a_auto")) * Shoe.CadenceMultiplier
-        : 0.0;
+    // One ball on the board at a time: "Gravité" makes it fall (and come back) faster.
+    public double BallSpeed =>
+        (1.0 + 0.15 * Level(IdleUpgrade.Cadence)) * (1.0 + 0.15 * SkillLevel("a_auto")) * Shoe.CadenceMultiplier;
 
     public double CritChance => Math.Min(0.6, 0.03 * Level(IdleUpgrade.Critical));
     public double CritMultiplier => 10 + 5 * SkillLevel("f_crit");

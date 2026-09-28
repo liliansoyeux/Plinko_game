@@ -13,7 +13,7 @@ Jeu incrémental (idle) de Plinko en Godot 4.7 / C#, inspiré de Cookie Clicker,
 ## Boucle de jeu
 
 - **Pièces.** Chaque bille qui tombe dans une case rapporte *valeur de la bille × multiplicateur de la case × bonus*. Les cases sont symétriques : faibles au centre, énormes sur les bords. Viser compte.
-- **Forge** (onglet *Forge*) : les billes sont gratuites et infinies. On forge sa bille palier par palier — Bille, Argent, Or, Diamant, Rubis, Cosmique — et chaque palier la fait rapporter 8× plus. Le **Polissage** (x1,2 par niveau) augmente sa valeur entre deux paliers. Au-delà de 24 billes lâchées par seconde, chaque bille à l'écran en représente plusieurs, pour préserver les performances.
+- **Forge** (onglet *Forge*) : la bille est gratuite et infinie. On forge sa bille palier par palier — Bille, Argent, Or, Diamant, Rubis, Cosmique — et chaque palier la fait rapporter 8× plus. Le **Polissage** (x1,2 par niveau) augmente sa valeur entre deux paliers. Une seule bille est sur le plateau à la fois (plus les copies des portails) : la **Gravité** la fait tomber et revenir plus vite.
 - **Améliorations** (onglet *Améliorations*) :
   - distributeur automatique ;
   - recharge rapide ;

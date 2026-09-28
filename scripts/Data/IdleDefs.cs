@@ -3,8 +3,8 @@ using System;
 
 namespace Plinko;
 
-// Ball tiers of the forge: balls are free and endless, and forging the next tier multiplies
-// what every ball pays by 8.
+// Ball tiers of the forge: balls are free and endless (one on the board at a time), and
+// forging the next tier multiplies what every ball pays by 8.
 public class BallTierDef
 {
     public int Index;
@@ -19,12 +19,12 @@ public static class BallTiers
 {
     public static readonly BallTierDef[] All =
     {
-        new() { Index = 0, Name = "Bille", Color = new Color(0.98f, 0.93f, 1f), Glow = Pal.Pink, Value = 1, ForgeCost = 0 },
-        new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 8, ForgeCost = 1_000 },
-        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 64, ForgeCost = 400_000 },
-        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 512, ForgeCost = 1.5e8 },
-        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 4_096, ForgeCost = 6e10 },
-        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 32_768, ForgeCost = 2.5e13 },
+        new() { Index = 0, Name = "Bille", Color = new Color(0.98f, 0.93f, 1f), Glow = Pal.Pink, Value = 10, ForgeCost = 0 },
+        new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 80, ForgeCost = 500 },
+        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 640, ForgeCost = 400_000 },
+        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 5_120, ForgeCost = 1.5e8 },
+        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 40_960, ForgeCost = 6e10 },
+        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 327_680, ForgeCost = 2.5e13 },
     };
 }
 
@@ -65,14 +65,14 @@ public static class Upgrades
         new()
         {
             Id = IdleUpgrade.AutoDropper, Name = "Distributeur automatique", Icon = UpgradeIcon.Gear,
-            Describe = _ => "Lâche des billes tout seul, en continu (2 billes par seconde au départ).",
+            Describe = _ => "Relance ta bille tout seul dès qu'elle est tombée.",
             BaseCost = 30, Growth = 1, MaxLevel = 1,
         },
         new()
         {
-            Id = IdleUpgrade.Cadence, Name = "Cadence", Icon = UpgradeIcon.Clock,
-            Describe = l => $"Le distributeur lâche 25% de billes en plus par seconde (niveau {l + 1}).",
-            BaseCost = 40, Growth = 3.2, MaxLevel = 40,
+            Id = IdleUpgrade.Cadence, Name = "Gravité", Icon = UpgradeIcon.Clock,
+            Describe = l => $"Ta bille tombe et revient plus vite : gravité x{1 + 0.15 * (l + 1):0.##} (niveau {l + 1}).",
+            BaseCost = 40, Growth = 2.6, MaxLevel = 20,
         },
         new()
         {
@@ -157,7 +157,7 @@ public static class SkillTree
                 Description = "Les cases extrêmes rapportent x3.", Costs = new[] { 200 } },
 
         new() { Id = "a_auto", Branch = SkillBranch.Automation, Tier = 0, Name = "Distributeur offert", Icon = UpgradeIcon.Gear,
-                Description = "Commence avec le distributeur automatique. Cadence +15% par niveau.", Costs = new[] { 2, 6, 12 } },
+                Description = "Commence avec le distributeur automatique. Gravité +15% par niveau.", Costs = new[] { 2, 6, 12 } },
         new() { Id = "a_balls", Branch = SkillBranch.Automation, Tier = 1, Name = "Forgeron", Icon = UpgradeIcon.ExtraBalls, RequiresId = "a_auto",
                 Description = "Forger la bille suivante coûte 10% moins cher par niveau.", Costs = new[] { 6, 15, 35 } },
         new() { Id = "a_upgrades", Branch = SkillBranch.Automation, Tier = 2, Name = "Intendant", Icon = UpgradeIcon.Xp, RequiresId = "a_balls",

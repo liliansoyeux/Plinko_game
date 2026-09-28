@@ -43,7 +43,6 @@ public partial class Ball : RigidBody2D
         CollisionMask = PhysicsLayers.Board;
         AddChild(new CollisionShape2D { Shape = new CircleShape2D { Radius = Radius } });
 
-        GravityScale = 1f;
         LockRotation = true;
         ContinuousCd = CcdMode.CastShape;
         ContactMonitor = true;

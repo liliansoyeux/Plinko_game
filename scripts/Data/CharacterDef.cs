@@ -38,7 +38,7 @@ public class CharacterDef
             var parts = new List<string>();
             if (CostMultiplier > 1.0) parts.Add($"Prix x{CostMultiplier:0.#}");
             if (SlotMultiplier < 1.0) parts.Add($"Cases x{SlotMultiplier:0.#}");
-            if (CadenceMultiplier < 1.0) parts.Add($"Cadence x{CadenceMultiplier:0.#}");
+            if (CadenceMultiplier < 1.0) parts.Add($"Gravité x{CadenceMultiplier:0.#}");
             return parts.Count == 0 ? "Aucune contrainte" : string.Join(" · ", parts).Replace(',', '.');
         }
     }

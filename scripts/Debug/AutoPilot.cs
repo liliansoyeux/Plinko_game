@@ -234,7 +234,7 @@ public partial class AutoPilot : Node
     {
         var idle = IdleManager.Instance;
         GD.Print($"[AutoPilot] {tag} t={_gameTime / 60.0:0.0}min coins={Big.Format(idle.Coins)} income={Big.Format(idle.IncomePerSecond)}/s " +
-                 $"run={Big.Format(idle.RunEarned)} tiers={idle.TiersUnlocked} cadence={idle.Cadence:0.0} upg={string.Join("/", idle.UpgradeLevels)} " +
+                 $"run={Big.Format(idle.RunEarned)} tiers={idle.TiersUnlocked} speed={idle.BallSpeed:0.00} upg={string.Join("/", idle.UpgradeLevels)} " +
                  $"jetons={idle.Jetons}/{idle.JetonsEarnedTotal} shoe={idle.ShoeId} unlocked={idle.UnlockedShoes}");
     }
 
