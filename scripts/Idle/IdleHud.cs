@@ -12,6 +12,7 @@ public partial class IdleHud : CanvasLayer
     public IdleBoard Board;
     private Button _sound;
     private Button _auto;
+    private SoundMenu _soundMenu;
 
     public override void _Ready()
     {
@@ -33,32 +34,16 @@ public partial class IdleHud : CanvasLayer
         _auto.Pressed += ToggleAutoDrop;
         buttons.AddChild(_auto);
         buttons.Position = new Vector2(660f, 18f);
-        _sound = SmallButton("♪", "Son (M)");
-        _sound.Pressed += ToggleSound;
+        _sound = SmallButton("♪", "Son et musique");
+        _sound.Pressed += ToggleSoundMenu;
         buttons.AddChild(_sound);
         var pause = SmallButton("II", "Pause (Échap)");
         pause.Pressed += () => PausePressed?.Invoke();
         buttons.AddChild(pause);
 
-        // Music volume gauge, top-left of the machine.
-        var musicLabel = Ui.Label("MUSIQUE", 13, Pal.Alpha(Pal.Cyan, 0.85f), Fonts.Bold);
-        musicLabel.Position = new Vector2(30f, 28f);
-        musicLabel.Size = new Vector2(80f, 20f);
-        root.AddChild(musicLabel);
-        var music = new HSlider
-        {
-            Position = new Vector2(104f, 26f),
-            Size = new Vector2(170f, 24f),
-            MinValue = 0, MaxValue = 1, Step = 0.05,
-            Value = Sfx.MusicVolume,
-            FocusMode = Control.FocusModeEnum.None,
-            TooltipText = "Volume de la musique",
-        };
-        music.AddThemeStyleboxOverride("slider", UiTheme.Box(new Color(0.08f, 0.04f, 0.12f, 0.9f), Pal.Alpha(Pal.Cyan, 0.5f), 1, 4, 3));
-        music.AddThemeStyleboxOverride("grabber_area", UiTheme.Box(Pal.Alpha(Pal.Cyan, 0.7f), Pal.Cyan, 1, 4, 3));
-        music.AddThemeStyleboxOverride("grabber_area_highlight", UiTheme.Box(Pal.Cyan, Pal.Cyan, 1, 4, 3));
-        music.ValueChanged += v => Sfx.SetMusicVolume((float)v);
-        root.AddChild(music);
+        // Sound menu, opened with the ♪ button: music volume gauge + mute switch.
+        _soundMenu = new SoundMenu { Position = new Vector2(596f, 66f), Visible = false };
+        root.AddChild(_soundMenu);
 
         var hint = Ui.Label("Viser : souris   ·   Clic / Espace : lâcher une bille   ·   A : lâcher auto   ·   Échap : pause", 13, Pal.Alpha(Pal.TextDim, 0.75f), Fonts.Regular, HorizontalAlignment.Center);
         hint.Position = new Vector2(0f, 972f);
@@ -88,6 +73,15 @@ public partial class IdleHud : CanvasLayer
         RefreshSound();
     }
 
+    public void ToggleSoundMenu()
+    {
+        _soundMenu.Visible = !_soundMenu.Visible;
+        _soundMenu.Refresh();
+    }
+
+    // Debug/autopilot: the sound menu's music slider.
+    public HSlider MusicSlider => _soundMenu.Slider;
+
     public void ToggleAutoDrop()
     {
         var idle = IdleManager.Instance;
@@ -106,7 +100,81 @@ public partial class IdleHud : CanvasLayer
         _auto.AddThemeColorOverride("font_hover_color", on ? Pal.Green.Lightened(0.3f) : Pal.Text);
     }
 
-    private void RefreshSound() => _sound.Modulate = Sfx.Muted ? new Color(1f, 1f, 1f, 0.35f) : Colors.White;
+    private void RefreshSound()
+    {
+        _sound.Modulate = Sfx.Muted ? new Color(1f, 1f, 1f, 0.35f) : Colors.White;
+        _soundMenu?.Refresh();
+    }
+}
+
+// Small drop-down under the ♪ button.
+public partial class SoundMenu : PanelContainer
+{
+    public HSlider Slider { get; private set; }
+    private Label _value;
+    private CheckButton _mute;
+    private bool _refreshing;
+
+    public override void _Ready()
+    {
+        CustomMinimumSize = new Vector2(262f, 0f);
+        AddThemeStyleboxOverride("panel", UiTheme.Box(new Color(0.07f, 0.03f, 0.1f, 1f), Pal.Cyan, 2, 12, 14));
+        var column = new VBoxContainer();
+        column.AddThemeConstantOverride("separation", 10);
+        AddChild(column);
+
+        var header = new HBoxContainer();
+        header.AddChild(Ui.Label("MUSIQUE", 16, Pal.Cyan, Fonts.Bold));
+        _value = Ui.Label("", 16, Pal.Text, Fonts.Bold, HorizontalAlignment.Right);
+        _value.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        header.AddChild(_value);
+        column.AddChild(header);
+
+        Slider = new HSlider
+        {
+            MinValue = 0, MaxValue = 100, Step = 5,
+            CustomMinimumSize = new Vector2(230f, 28f),
+            FocusMode = FocusModeEnum.None,
+            MouseFilter = MouseFilterEnum.Stop,
+        };
+        var track = UiTheme.Box(new Color(0.16f, 0.1f, 0.22f), Pal.Alpha(Pal.Cyan, 0.4f), 1, 5, 0);
+        track.ContentMarginTop = track.ContentMarginBottom = 4;
+        var fill = UiTheme.Box(Pal.Alpha(Pal.Cyan, 0.75f), Pal.Cyan, 1, 5, 0);
+        fill.ContentMarginTop = fill.ContentMarginBottom = 4;
+        Slider.AddThemeStyleboxOverride("slider", track);
+        Slider.AddThemeStyleboxOverride("grabber_area", fill);
+        Slider.AddThemeStyleboxOverride("grabber_area_highlight", fill);
+        Slider.ValueChanged += OnSlider;
+        column.AddChild(Slider);
+
+        _mute = new CheckButton { Text = "Couper tout le son (M)", FocusMode = FocusModeEnum.None };
+        _mute.AddThemeFontSizeOverride("font_size", 15);
+        _mute.Toggled += muted =>
+        {
+            if (_refreshing) return;
+            Sfx.SetMuted(muted);
+            SaveData.Muted = muted;
+        };
+        column.AddChild(_mute);
+        Refresh();
+    }
+
+    private void OnSlider(double value)
+    {
+        _value.Text = $"{value:0}%";
+        if (_refreshing) return;
+        Sfx.SetMusicVolume((float)(value / 100.0));
+    }
+
+    public void Refresh()
+    {
+        if (Slider == null) return;
+        _refreshing = true;
+        Slider.Value = Math.Round(Sfx.MusicVolume * 100.0);
+        _value.Text = $"{Slider.Value:0}%";
+        _mute.ButtonPressed = Sfx.Muted;
+        _refreshing = false;
+    }
 }
 
 public partial class IdleHudCanvas : Control

@@ -360,8 +360,19 @@ public partial class UpgradeRow : ShopRowBase
         Accent = Def.Id == IdleUpgrade.Portal ? Pal.Legendary : Pal.Cyan;
     }
 
+    private bool IsDropperSwitch => Def.Id == IdleUpgrade.AutoDropper && IdleManager.Instance.HasAutoDropper;
+
     protected override void OnBuy()
     {
+        var idle = IdleManager.Instance;
+        if (IsDropperSwitch)
+        {
+            idle.AutoDropEnabled = !idle.AutoDropEnabled;
+            idle.Save();
+            Sfx.Play(Sound.Click);
+            Refresh();
+            return;
+        }
         if (IdleManager.Instance.BuyUpgrade(Def.Id))
         {
             Sfx.Play(Sound.Pick);
@@ -378,6 +389,15 @@ public partial class UpgradeRow : ShopRowBase
         int level = idle.Level(Def.Id);
         bool maxed = idle.IsMaxed(Def.Id);
         Title.Text = Def.MaxLevel == 1 ? Def.Name : $"{Def.Name}  ·  {level}/{Def.MaxLevel}";
+        if (IsDropperSwitch)
+        {
+            bool on = idle.AutoDropEnabled;
+            Info.Text = on ? "Mode AUTO : la bille repart toute seule. Clique pour passer en manuel." : "Mode MANUEL : c'est toi qui lâches la bille. Clique pour repasser en auto.";
+            Buy.Text = on ? "AUTO\nactivé" : "MANUEL\n(auto arrêté)";
+            Buy.Disabled = false;
+            Buy.AddThemeColorOverride("font_color", on ? Pal.Green : Pal.Text);
+            return;
+        }
         Info.Text = maxed ? "Niveau maximum atteint." : Def.Describe(level);
         if (maxed)
         {

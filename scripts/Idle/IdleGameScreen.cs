@@ -25,6 +25,7 @@ public partial class IdleGameScreen : Node2D
     private Node2D _fx;
     private MachineCabinet _cabinet;
     private IdleHud _hud;
+    public IdleHud Hud => _hud;
     private Banner _banner;
     private PauseOverlay _pause;
     private PlacementTool _placer;

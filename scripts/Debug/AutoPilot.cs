@@ -109,6 +109,7 @@ public partial class AutoPilot : Node
         }
         var game = main.Game;
         if (game == null) return;
+        if (_args.ContainsKey("probe-sound")) ProbeSound(game);
 
         if (game.IsPlacing)
         {
@@ -242,5 +243,31 @@ public partial class AutoPilot : Node
     {
         var image = GetViewport().GetTexture().GetImage();
         image.SavePng($"{_shotDir}/shot_{_shotIndex++:000}.png");
+    }
+
+    // --probe-sound: opens the sound menu and clicks at 30% of the music slider through the
+    // real input pipeline, then prints the resulting music volume.
+    private int _probeStep;
+    private void ProbeSound(IdleGameScreen game)
+    {
+        if (_probeStep == 0 && _realTime > 2.0)
+        {
+            _probeStep = 1;
+            game.Hud.ToggleSoundMenu();
+        }
+        else if (_probeStep == 1 && _realTime > 2.5)
+        {
+            _probeStep = 2;
+            var rect = game.Hud.MusicSlider.GetGlobalRect();
+            var at = rect.Position + new Vector2(rect.Size.X * 0.3f, rect.Size.Y / 2f);
+            GD.Print($"[AutoPilot] probe slider rect={rect} click={at} before={Sfx.MusicVolume}");
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at }, true);
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at }, true);
+        }
+        else if (_probeStep == 2 && _realTime > 3.0)
+        {
+            _probeStep = 3;
+            GD.Print($"[AutoPilot] probe after={Sfx.MusicVolume} slider={game.Hud.MusicSlider.Value}");
+        }
     }
 }
