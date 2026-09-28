@@ -21,7 +21,6 @@ public partial class IdleManager : Node
     public const int SlotCount = 13;
     public const double StartingCoins = 50;
     private const double AutosaveSeconds = 15.0;
-    public const double JetonScale = 1e5;     // first jeton at 100K earned in a run
     public const double BonusPerJeton = 0.03;  // +3% income per jeton ever earned
 
     // ---- current run
@@ -229,14 +228,16 @@ public partial class IdleManager : Node
             _buckets[_bucket] += amount;
         }
         CheckShoeUnlocks();
-        if (!_prestigeAnnounced && JetonsForPrestige >= 1)
+        int rank = PrestigeRank;
+        if (rank > _announcedRank)
         {
-            _prestigeAnnounced = true;
-            Announce?.Invoke("PRESTIGE DISPONIBLE !", "Onglet Prestige : recommence à zéro contre des jetons (bonus permanents).", Pal.Purple.Lightened(0.3f));
+            _announcedRank = rank;
+            string next = HasNextMilestone ? $" Prochain palier à {Big.Format(NextMilestone)} : +{RewardForRank(rank + 1)}." : "";
+            Announce?.Invoke($"PALIER DE PRESTIGE {rank} !", $"Recommencer maintenant rapporte +{JetonsForPrestige} jetons (onglet Prestige).{next}", Pal.Purple.Lightened(0.3f));
         }
     }
 
-    private bool _prestigeAnnounced;
+    private int _announcedRank;
 
     // A ball landed: returns the payout and whether it was a critical hit.
     // `pegHits`: pegs touched during the fall, each one adding to the payout (Rebonds en chaîne).
@@ -276,19 +277,31 @@ public partial class IdleManager : Node
 
     // ================================================================ prestige
 
-    // Cube root (like Cookie Clicker's prestige), so late-game runs don't flood the tree.
-    public int JetonsForPrestige => (int)Math.Floor(Math.Cbrt(RunEarned / JetonScale) * Shoe.JetonMultiplier);
+    // Prestige milestones ("paliers"): prestige is only possible once a milestone is reached,
+    // and the jetons it gives only go up at the next one (10x the earnings), so you pick
+    // your moment instead of restarting at any time.
+    public static readonly double[] PrestigeMilestones = { 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16 };
+    private static readonly int[] PrestigeRewards = { 1, 3, 6, 12, 25, 50, 100, 200, 400, 800, 1600, 3200 };
 
-    // Earnings needed (this run, current shoes) for the next jeton.
-    public double NextJetonAt
+    // Milestones reached this run (0 = prestige not available yet).
+    public int PrestigeRank
     {
         get
         {
-            int next = JetonsForPrestige + 1;
-            double ratio = next / Shoe.JetonMultiplier;
-            return ratio * ratio * ratio * JetonScale;
+            int rank = 0;
+            while (rank < PrestigeMilestones.Length && RunEarned >= PrestigeMilestones[rank]) rank++;
+            return rank;
         }
     }
+
+    public int RewardForRank(int rank) =>
+        rank <= 0 ? 0 : (int)Math.Round(PrestigeRewards[Math.Min(rank, PrestigeRewards.Length) - 1] * Shoe.JetonMultiplier);
+
+    public int JetonsForPrestige => RewardForRank(PrestigeRank);
+
+    public bool HasNextMilestone => PrestigeRank < PrestigeMilestones.Length;
+    public double NextMilestone => HasNextMilestone ? PrestigeMilestones[PrestigeRank] : PrestigeMilestones[^1];
+    public double PreviousMilestone => PrestigeRank == 0 ? 0 : PrestigeMilestones[PrestigeRank - 1];
 
     public bool IsShoeUnlocked(int index) => index < UnlockedShoes;
     public int ShoeIndex => Characters.All.FindIndex(c => c.Id == ShoeId);
@@ -324,7 +337,7 @@ public partial class IdleManager : Node
         double[] startCoins = { StartingCoins, 500, 50_000, 5_000_000 };
         Coins = startCoins[Math.Min(3, SkillLevel("e_start"))];
         RunEarned = 0;
-        _prestigeAnnounced = false;
+        _announcedRank = 0;
         TiersUnlocked = 1;
         UpgradeLevels = new int[Upgrades.All.Length];
         if (SkillLevel("a_auto") > 0)
@@ -558,7 +571,7 @@ public partial class IdleManager : Node
 
         Coins = (double)f.GetValue("run", "coins", 0.0);
         RunEarned = (double)f.GetValue("run", "earned", 0.0);
-        _prestigeAnnounced = JetonsForPrestige >= 1;
+        _announcedRank = PrestigeRank;
         TiersUnlocked = Math.Clamp((int)f.GetValue("run", "tiers", 1), 1, BallTiers.All.Length);
         ParseInts((string)f.GetValue("run", "upgrades", ""), UpgradeLevels);
         foreach (var part in ((string)f.GetValue("run", "portals", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))

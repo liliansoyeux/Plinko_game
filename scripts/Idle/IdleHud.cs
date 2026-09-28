@@ -217,10 +217,15 @@ public partial class IdleHudCanvas : Control
         }
 
         // Ledge gauges.
-        double next = idle.NextJetonAt;
-        double previous = idle.JetonsForPrestige <= 0 ? 0 : Math.Pow(idle.JetonsForPrestige / idle.Shoe.JetonMultiplier, 3) * IdleManager.JetonScale;
-        float jetonRatio = (float)Math.Clamp((idle.RunEarned - previous) / Math.Max(1, next - previous), 0, 1);
-        DrawGauge(new Rect2(246f, 822f, 196f, 36f), $"JETONS À GAGNER : {idle.JetonsForPrestige}", jetonRatio, Pal.Purple);
+        // Progress toward the next prestige milestone (log scale: each one is 10x the last).
+        double next = idle.NextMilestone;
+        double previous = idle.PreviousMilestone;
+        float jetonRatio = previous <= 0
+            ? (float)Math.Clamp(idle.RunEarned / next, 0, 1)
+            : (float)Math.Clamp(Math.Log10(Math.Max(1, idle.RunEarned) / previous) / Math.Log10(next / previous), 0, 1);
+        if (!idle.HasNextMilestone) jetonRatio = 1f;
+        string gaugeText = idle.PrestigeRank == 0 ? $"PRESTIGE À {Big.Format(next)}" : $"PALIER {idle.PrestigeRank} · +{idle.JetonsForPrestige} JETONS";
+        DrawGauge(new Rect2(246f, 822f, 196f, 36f), gaugeText, jetonRatio, Pal.Purple);
 
         if (idle.UnlockedShoes < Characters.All.Count)
         {

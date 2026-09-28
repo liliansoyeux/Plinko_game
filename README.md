@@ -29,7 +29,7 @@ Jeu incrémental (idle) de Plinko en Godot 4.7 / C#, inspiré de Cookie Clicker,
 
 ## Prestige : les chaussures
 
-- L'onglet *Prestige* permet de **recommencer à zéro** (pièces, bille forgée, améliorations) contre des **jetons**, dès 100K gagnés dans la partie. Le nombre de jetons suit la racine cubique des gains de la partie, multipliée par le bonus des chaussures. Chaque jeton gagné donne +3 % de revenus pour toujours, et les jetons se dépensent dans l'arbre de compétences. On peut aussi y recommencer avec une paire de chaussures plus dure (plus de jetons).
+- L'onglet *Prestige* permet de **recommencer à zéro** (pièces, bille forgée, améliorations) contre des **jetons**, par **paliers** : 100K de gains dans la partie = palier 1 (1 jeton), 1M = palier 2 (3 jetons), puis 10M, 100M… (6, 12, 25… jetons), multipliés par le bonus des chaussures. Le prestige n'est possible qu'à partir du palier 1, et les jetons ne montent qu'au palier suivant. Chaque jeton gagné donne +3 % de revenus pour toujours, et les jetons se dépensent dans l'arbre de compétences. On peut aussi y recommencer avec une paire de chaussures plus dure (plus de jetons).
 - Les **chaussures sont des niveaux de difficulté** débloqués petit à petit. Chaque paire se débloque en gagnant assez dans une seule partie avec la paire précédente :
 
 | Chaussures | Contraintes | Jetons | Déblocage |

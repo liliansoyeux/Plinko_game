@@ -21,10 +21,10 @@ public static class BallTiers
     {
         new() { Index = 0, Name = "Bille", Color = new Color(0.98f, 0.93f, 1f), Glow = Pal.Pink, Value = 10, ForgeCost = 0 },
         new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 80, ForgeCost = 500 },
-        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 640, ForgeCost = 400_000 },
-        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 5_120, ForgeCost = 1.5e8 },
-        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 40_960, ForgeCost = 6e10 },
-        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 327_680, ForgeCost = 2.5e13 },
+        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 640, ForgeCost = 150_000 },
+        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 5_120, ForgeCost = 4e7 },
+        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 40_960, ForgeCost = 1.5e10 },
+        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 327_680, ForgeCost = 5e12 },
     };
 }
 
@@ -77,13 +77,13 @@ public static class Upgrades
         {
             Id = IdleUpgrade.Cadence, Name = "Gravité", Icon = UpgradeIcon.Clock,
             Describe = l => $"Ta bille tombe et revient plus vite : gravité x{1 + 0.15 * (l + 1):0.##} (niveau {l + 1}).",
-            BaseCost = 40, Growth = 2.6, MaxLevel = 20,
+            BaseCost = 40, Growth = 2.4, MaxLevel = 25,
         },
         new()
         {
             Id = IdleUpgrade.Value, Name = "Polissage", Icon = UpgradeIcon.Multiplier,
             Describe = l => $"Ta bille rapporte x1,2 (niveau {l + 1}).",
-            BaseCost = 100, Growth = 10, MaxLevel = 30,
+            BaseCost = 100, Growth = 7, MaxLevel = 40,
         },
         new()
         {
@@ -101,19 +101,19 @@ public static class Upgrades
         {
             Id = IdleUpgrade.Critical, Name = "Coup critique", Icon = UpgradeIcon.Star,
             Describe = l => $"{(l + 1) * 3}% de chances qu'une bille rapporte x10.",
-            BaseCost = 2_500, Growth = 5, MaxLevel = 15,
+            BaseCost = 2_000, Growth = 4, MaxLevel = 15,
         },
         new()
         {
             Id = IdleUpgrade.Slots, Name = "Cases renforcées", Icon = UpgradeIcon.NarrowSlots,
             Describe = l => $"Tous les multiplicateurs de cases x1,25 (niveau {l + 1}).",
-            BaseCost = 6_000, Growth = 12, MaxLevel = 25,
+            BaseCost = 4_000, Growth = 8, MaxLevel = 30,
         },
         new()
         {
             Id = IdleUpgrade.Portal, Name = "Portail dédoubleur", Icon = UpgradeIcon.Portal,
             Describe = l => "Place un portail : chaque bille qui le traverse se dédouble.",
-            BaseCost = 2e6, Growth = 150, MaxLevel = 3, AutoBuyable = false,
+            BaseCost = 5e5, Growth = 60, MaxLevel = 3, AutoBuyable = false,
         },
         new()
         {
@@ -131,7 +131,7 @@ public static class Upgrades
         {
             Id = IdleUpgrade.Twin, Name = "Bille jumelle", Icon = UpgradeIcon.TwinBall,
             Describe = l => $"{(l + 1) * 5}% de chances qu'une deuxième bille parte avec la tienne.",
-            BaseCost = 1_500, Growth = 6, MaxLevel = 10,
+            BaseCost = 1_500, Growth = 4, MaxLevel = 10,
         },
         new()
         {
@@ -143,7 +143,7 @@ public static class Upgrades
         {
             Id = IdleUpgrade.Interest, Name = "Intérêts", Icon = UpgradeIcon.GoldBall,
             Describe = l => $"Toutes les 10 s, +{(l + 1) * 2}% de tes pièces (au plus {(l + 1) * 10} s de gains).",
-            BaseCost = 3_000, Growth = 7, MaxLevel = 10,
+            BaseCost = 3_000, Growth = 5, MaxLevel = 10,
         },
         new()
         {

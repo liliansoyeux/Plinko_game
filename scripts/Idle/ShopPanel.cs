@@ -429,10 +429,10 @@ public partial class PrestigeSummary : Control, IShopRow
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(560f, 250f);
-        _text = Ui.Wrapped("", 15, Pal.Text, Fonts.Regular, HorizontalAlignment.Left, new Vector2(16f, 12f), new Vector2(530f, 150f));
+        CustomMinimumSize = new Vector2(560f, 262f);
+        _text = Ui.Wrapped("", 15, Pal.Text, Fonts.Regular, HorizontalAlignment.Left, new Vector2(16f, 12f), new Vector2(530f, 164f));
         AddChild(_text);
-        _button = new Button { Position = new Vector2(16f, 170f), Size = new Vector2(528f, 66f), FocusMode = FocusModeEnum.None };
+        _button = new Button { Position = new Vector2(16f, 182f), Size = new Vector2(528f, 66f), FocusMode = FocusModeEnum.None };
         _button.AddThemeFontSizeOverride("font_size", 20);
         _button.AddThemeStyleboxOverride("normal", UiTheme.Box(new Color(0.25f, 0.08f, 0.38f), Pal.Purple.Lightened(0.3f), 2, 12, 6));
         _button.AddThemeStyleboxOverride("hover", UiTheme.Box(new Color(0.34f, 0.12f, 0.5f), Pal.Purple.Lightened(0.5f), 2, 12, 6));
@@ -477,14 +477,18 @@ public partial class PrestigeSummary : Control, IShopRow
         int gain = idle.JetonsForPrestige;
         double bonusNow = 1.0 + IdleManager.BonusPerJeton * idle.JetonsEarnedTotal;
         double bonusAfter = 1.0 + IdleManager.BonusPerJeton * (idle.JetonsEarnedTotal + gain);
+        int rank = idle.PrestigeRank;
+        string next = idle.HasNextMilestone
+            ? $"Palier {rank + 1} à {Big.Format(idle.NextMilestone)} de gains : +{idle.RewardForRank(rank + 1)} jetons."
+            : "Tous les paliers sont atteints !";
         _text.Text =
-            $"PRESTIGE  ·  gains de cette partie : {Big.Format(idle.RunEarned)}\n" +
-            $"Recommencer maintenant rapporte {gain} jeton(s)  (prochain à {Big.Format(idle.NextJetonAt)}).\n" +
+            $"PRESTIGE  ·  palier {rank}  ·  gains de cette partie : {Big.Format(idle.RunEarned)}\n" +
+            (rank == 0 ? "Le prestige s'ouvre au premier palier. " : $"Recommencer maintenant rapporte {gain} jeton(s). ") + next + "\n" +
             $"Revenus pour toujours : x{bonusNow.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} → x{bonusAfter.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}  (+{IdleManager.BonusPerJeton * 100:0}% par jeton), et les jetons se dépensent dans l'arbre de compétences.\n" +
             "Tu repars de zéro (pièces, bille forgée, améliorations), mais tu gardes jetons, compétences, succès et paires débloquées.";
         _button.Disabled = gain < 1;
         _button.Text = gain < 1
-            ? $"Recommencer  ·  1er jeton à {Big.Format(idle.NextJetonAt)}"
+            ? $"Prestige au palier 1  ·  {Big.Format(idle.NextMilestone)} de gains"
             : _armed ? $"Confirmer ?  (+{gain} jetons)" : $"RECOMMENCER  ·  +{gain} jeton(s)";
     }
 
