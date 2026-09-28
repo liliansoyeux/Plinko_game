@@ -448,7 +448,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         _time += (float)delta;
 
         var idle = IdleManager.Instance;
-        if (idle.HasAutoDropper && LauncherActive && !BallInPlay)
+        if (idle.HasAutoDropper && idle.AutoDropEnabled && LauncherActive && !BallInPlay)
         {
             _relaunchTimer += delta * idle.BallSpeed;
             if (_relaunchTimer >= RelaunchDelay)

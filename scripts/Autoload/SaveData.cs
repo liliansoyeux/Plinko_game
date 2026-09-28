@@ -34,6 +34,17 @@ public static class SaveData
         }
     }
 
+    // 0..1, applied on top of the music's base level.
+    public static float MusicVolume
+    {
+        get => (float)(double)File.GetValue("settings", "music_volume", 1.0);
+        set
+        {
+            File.SetValue("settings", "music_volume", (double)value);
+            Save();
+        }
+    }
+
     public static void Save()
     {
         if (!Disabled)
@@ -45,8 +56,10 @@ public static class SaveData
     public static void Wipe()
     {
         bool muted = Muted;
+        float music = MusicVolume;
         _file = new ConfigFile();
         _file.SetValue("settings", "muted", muted);
+        _file.SetValue("settings", "music_volume", (double)music);
         Save();
     }
 }

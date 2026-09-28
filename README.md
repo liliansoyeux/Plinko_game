@@ -6,7 +6,7 @@ Jeu incrémental (idle) de Plinko en Godot 4.7 / C#, inspiré de Cookie Clicker,
 
 ## Jouer
 
-- **Souris** : viser (le lanceur suit le curseur). **Clic** ou **Espace** pour lâcher une bille, **clic maintenu** pour une rafale.
+- **Souris** : viser (le lanceur suit le curseur). **Clic** ou **Espace** pour lâcher la bille. **A** (ou le bouton AUTO) met en marche ou arrête le lâcher automatique. **M** coupe le son ; la jauge MUSIQUE règle le volume de la musique.
 - `←/→` (ou `Q/D`) pour viser, `Échap` pour la pause, `M` pour couper le son.
 - La partie se **sauvegarde toute seule**, toutes les 15 secondes et à la fermeture.
 

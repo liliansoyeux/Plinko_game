@@ -59,7 +59,25 @@ public partial class Sfx : Node
         _music = new AudioStreamPlayer { Stream = BuildMusic(), VolumeDb = -30f, Bus = "Master" };
         AddChild(_music);
         _music.Play();
-        CreateTween().TweenProperty(_music, "volume_db", -13f, 2.5f);
+        CreateTween().TweenProperty(_music, "volume_db", MusicDb(SaveData.MusicVolume), 2.5f);
+    }
+
+    private const float MusicBaseDb = -13f;
+
+    private static float MusicDb(float volume) =>
+        volume <= 0.001f ? -80f : MusicBaseDb + Mathf.LinearToDb(volume);
+
+    public static float MusicVolume => SaveData.MusicVolume;
+
+    // Music volume slider (0..1), saved with the settings.
+    public static void SetMusicVolume(float volume)
+    {
+        volume = Mathf.Clamp(volume, 0f, 1f);
+        SaveData.MusicVolume = volume;
+        if (_instance?._music != null)
+        {
+            _instance._music.VolumeDb = MusicDb(volume);
+        }
     }
 
     public static bool Muted => AudioServer.IsBusMute(0);

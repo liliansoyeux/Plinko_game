@@ -11,6 +11,7 @@ public partial class IdleHud : CanvasLayer
 
     public IdleBoard Board;
     private Button _sound;
+    private Button _auto;
 
     public override void _Ready()
     {
@@ -26,6 +27,12 @@ public partial class IdleHud : CanvasLayer
         var buttons = new HBoxContainer { Position = new Vector2(746f, 18f), MouseFilter = Control.MouseFilterEnum.Ignore };
         buttons.AddThemeConstantOverride("separation", 8);
         root.AddChild(buttons);
+        _auto = SmallButton("AUTO", "Lâcher automatique : marche / arrêt (A)");
+        _auto.CustomMinimumSize = new Vector2(78f, 40f);
+        _auto.AddThemeFontSizeOverride("font_size", 15);
+        _auto.Pressed += ToggleAutoDrop;
+        buttons.AddChild(_auto);
+        buttons.Position = new Vector2(660f, 18f);
         _sound = SmallButton("♪", "Son (M)");
         _sound.Pressed += ToggleSound;
         buttons.AddChild(_sound);
@@ -33,7 +40,27 @@ public partial class IdleHud : CanvasLayer
         pause.Pressed += () => PausePressed?.Invoke();
         buttons.AddChild(pause);
 
-        var hint = Ui.Label("Viser : souris   ·   Clic / Espace : lâcher une bille   ·   Échap : pause", 13, Pal.Alpha(Pal.TextDim, 0.75f), Fonts.Regular, HorizontalAlignment.Center);
+        // Music volume gauge, top-left of the machine.
+        var musicLabel = Ui.Label("MUSIQUE", 13, Pal.Alpha(Pal.Cyan, 0.85f), Fonts.Bold);
+        musicLabel.Position = new Vector2(30f, 28f);
+        musicLabel.Size = new Vector2(80f, 20f);
+        root.AddChild(musicLabel);
+        var music = new HSlider
+        {
+            Position = new Vector2(104f, 26f),
+            Size = new Vector2(170f, 24f),
+            MinValue = 0, MaxValue = 1, Step = 0.05,
+            Value = Sfx.MusicVolume,
+            FocusMode = Control.FocusModeEnum.None,
+            TooltipText = "Volume de la musique",
+        };
+        music.AddThemeStyleboxOverride("slider", UiTheme.Box(new Color(0.08f, 0.04f, 0.12f, 0.9f), Pal.Alpha(Pal.Cyan, 0.5f), 1, 4, 3));
+        music.AddThemeStyleboxOverride("grabber_area", UiTheme.Box(Pal.Alpha(Pal.Cyan, 0.7f), Pal.Cyan, 1, 4, 3));
+        music.AddThemeStyleboxOverride("grabber_area_highlight", UiTheme.Box(Pal.Cyan, Pal.Cyan, 1, 4, 3));
+        music.ValueChanged += v => Sfx.SetMusicVolume((float)v);
+        root.AddChild(music);
+
+        var hint = Ui.Label("Viser : souris   ·   Clic / Espace : lâcher une bille   ·   A : lâcher auto   ·   Échap : pause", 13, Pal.Alpha(Pal.TextDim, 0.75f), Fonts.Regular, HorizontalAlignment.Center);
         hint.Position = new Vector2(0f, 972f);
         hint.Size = new Vector2(900f, 20f);
         root.AddChild(hint);
@@ -59,6 +86,24 @@ public partial class IdleHud : CanvasLayer
         Sfx.SetMuted(muted);
         SaveData.Muted = muted;
         RefreshSound();
+    }
+
+    public void ToggleAutoDrop()
+    {
+        var idle = IdleManager.Instance;
+        if (!idle.HasAutoDropper) return;
+        idle.AutoDropEnabled = !idle.AutoDropEnabled;
+        idle.Save();
+    }
+
+    public override void _Process(double delta)
+    {
+        var idle = IdleManager.Instance;
+        _auto.Visible = idle.HasAutoDropper;
+        bool on = idle.AutoDropEnabled;
+        _auto.Text = on ? "AUTO" : "MANUEL";
+        _auto.AddThemeColorOverride("font_color", on ? Pal.Green : Pal.TextDim);
+        _auto.AddThemeColorOverride("font_hover_color", on ? Pal.Green.Lightened(0.3f) : Pal.Text);
     }
 
     private void RefreshSound() => _sound.Modulate = Sfx.Muted ? new Color(1f, 1f, 1f, 0.35f) : Colors.White;

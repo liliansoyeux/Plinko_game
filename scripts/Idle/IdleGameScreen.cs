@@ -147,6 +147,7 @@ public partial class IdleGameScreen : Node2D
                     case Key.Space: Board.ManualDrop(); break;
                     case Key.Escape: case Key.P: if (!key.Echo) TogglePause(); break;
                     case Key.M: if (!key.Echo) _hud.ToggleSound(); break;
+                    case Key.A: if (!key.Echo) _hud.ToggleAutoDrop(); break;
                     default: return;
                 }
                 GetViewport().SetInputAsHandled();

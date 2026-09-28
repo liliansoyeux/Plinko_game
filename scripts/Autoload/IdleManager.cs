@@ -46,6 +46,8 @@ public partial class IdleManager : Node
     private double _achievementTimer;
     public double LifetimeBallsDropped { get; private set; }
     public bool AutoBuyUpgrades { get; set; } = true;
+    // The player can pause the auto-dropper without losing it.
+    public bool AutoDropEnabled { get; set; } = true;
 
     // ---- transient
     public double FrenzyTimeLeft { get; private set; }
@@ -516,6 +518,7 @@ public partial class IdleManager : Node
         f.SetValue("meta", "shoe", ShoeId);
         f.SetValue("meta", "unlocked_shoes", UnlockedShoes);
         f.SetValue("meta", "autobuy_upgrades", AutoBuyUpgrades);
+        f.SetValue("meta", "auto_drop", AutoDropEnabled);
         f.SetValue("meta", "last_income", IncomePerSecond);
         f.SetValue("meta", "last_save", Time.GetUnixTimeFromSystem());
         f.SetValue("meta", "achievements", string.Join(",", _achievements));
@@ -566,6 +569,7 @@ public partial class IdleManager : Node
         ShoeId = (string)f.GetValue("meta", "shoe", Characters.Classic.Id);
         UnlockedShoes = Math.Clamp((int)f.GetValue("meta", "unlocked_shoes", 1), 1, Characters.All.Count);
         AutoBuyUpgrades = (bool)f.GetValue("meta", "autobuy_upgrades", true);
+        AutoDropEnabled = (bool)f.GetValue("meta", "auto_drop", true);
         foreach (var id in ((string)f.GetValue("meta", "achievements", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
             _achievements.Add(id);
@@ -608,6 +612,7 @@ public partial class IdleManager : Node
         ShoeId = Characters.Classic.Id;
         UnlockedShoes = 1;
         AutoBuyUpgrades = true;
+        AutoDropEnabled = true;
         ResetRun();
         Save();
     }
