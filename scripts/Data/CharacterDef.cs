@@ -65,7 +65,7 @@ public static class Characters
         AccentColor = new Color(0.98f, 0.96f, 1f),
         PantsColor = new Color(0.2f, 0.26f, 0.45f),
         CostMultiplier = 2.0,
-        JetonMultiplier = 3.0,
+        JetonMultiplier = 1.5,
         UnlockRunEarnings = 1e7,
     };
 
@@ -79,7 +79,7 @@ public static class Characters
         PantsColor = new Color(0.26f, 0.1f, 0.22f),
         CostMultiplier = 2.0,
         SlotMultiplier = 0.6,
-        JetonMultiplier = 8.0,
+        JetonMultiplier = 2.0,
         UnlockRunEarnings = 1e9,
     };
 
@@ -94,7 +94,7 @@ public static class Characters
         CostMultiplier = 3.0,
         SlotMultiplier = 0.6,
         CadenceMultiplier = 0.5,
-        JetonMultiplier = 20.0,
+        JetonMultiplier = 3.0,
         UnlockRunEarnings = 1e11,
     };
 
@@ -109,7 +109,7 @@ public static class Characters
         CostMultiplier = 4.0,
         SlotMultiplier = 0.5,
         CadenceMultiplier = 0.4,
-        JetonMultiplier = 60.0,
+        JetonMultiplier = 4.0,
         UnlockRunEarnings = 1e13,
     };
 

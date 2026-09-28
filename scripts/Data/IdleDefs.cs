@@ -3,8 +3,9 @@ using System;
 
 namespace Plinko;
 
-// Ball tiers of the forge: balls are free and endless (one on the board at a time), and
-// forging the next tier multiplies what every ball pays by 8.
+// Ball tiers of the forge: balls are free and endless (one on the board at a time). Each
+// tier levels up from 1 to 10 (x1.25 per level), and at level 10 the next tier can be
+// forged: level 1 of a tier (x8) is always worth more than level 10 of the one before.
 public class BallTierDef
 {
     public int Index;
@@ -13,6 +14,7 @@ public class BallTierDef
     public Color Glow;
     public double Value;       // coins per landing, before slot & multipliers
     public double ForgeCost;   // one-time cost to forge this tier
+    public int RequiredPrestiges;  // prestiges done before this tier can be forged
 }
 
 public static class BallTiers
@@ -20,11 +22,11 @@ public static class BallTiers
     public static readonly BallTierDef[] All =
     {
         new() { Index = 0, Name = "Bille", Color = new Color(0.98f, 0.93f, 1f), Glow = Pal.Pink, Value = 10, ForgeCost = 0 },
-        new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 80, ForgeCost = 500 },
-        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 640, ForgeCost = 150_000 },
-        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 5_120, ForgeCost = 4e7 },
-        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 40_960, ForgeCost = 1.5e10 },
-        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 327_680, ForgeCost = 5e12 },
+        new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 80, ForgeCost = 20_000 },
+        new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 640, ForgeCost = 8e6 },
+        new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 5_120, ForgeCost = 4e9, RequiredPrestiges = 2 },
+        new() { Index = 4, Name = "Bille de rubis", Color = new Color(1f, 0.35f, 0.45f), Glow = Pal.Red, Value = 40_960, ForgeCost = 2e12, RequiredPrestiges = 5 },
+        new() { Index = 5, Name = "Bille cosmique", Color = new Color(0.8f, 0.6f, 1f), Glow = Pal.Purple, Value = 327_680, ForgeCost = 1e15, RequiredPrestiges = 9 },
     };
 }
 
@@ -56,6 +58,7 @@ public class UpgradeDef
     public double Growth;
     public int MaxLevel;
     public bool AutoBuyable = true;
+    public int RequiredPrestiges;   // prestiges done before it shows up in the shop
     // Retired upgrades stay in the enum (save files store levels by index) but are hidden
     // from the shop and never bought.
     public bool Retired;
@@ -77,13 +80,13 @@ public static class Upgrades
         {
             Id = IdleUpgrade.Cadence, Name = "Gravité", Icon = UpgradeIcon.Clock,
             Describe = l => $"Ta bille tombe et revient plus vite : gravité x{1 + 0.15 * (l + 1):0.##} (niveau {l + 1}).",
-            BaseCost = 40, Growth = 2.4, MaxLevel = 25,
+            BaseCost = 40, Growth = 2.8, MaxLevel = 25,
         },
         new()
         {
             Id = IdleUpgrade.Value, Name = "Polissage", Icon = UpgradeIcon.Multiplier,
             Describe = l => $"Ta bille rapporte x1,2 (niveau {l + 1}).",
-            BaseCost = 100, Growth = 7, MaxLevel = 40,
+            BaseCost = 100, Growth = 9, MaxLevel = 40, Retired = true,
         },
         new()
         {
@@ -95,25 +98,25 @@ public static class Upgrades
         {
             Id = IdleUpgrade.GoldenPegs, Name = "Clous dorés", Icon = UpgradeIcon.Peg,
             Describe = l => $"Chaque clou touché rapporte {(l + 1) * 3}% de la valeur de la bille.",
-            BaseCost = 400, Growth = 3.5, MaxLevel = 25,
+            BaseCost = 400, Growth = 4, MaxLevel = 25,
         },
         new()
         {
             Id = IdleUpgrade.Critical, Name = "Coup critique", Icon = UpgradeIcon.Star,
             Describe = l => $"{(l + 1) * 3}% de chances qu'une bille rapporte x10.",
-            BaseCost = 2_000, Growth = 4, MaxLevel = 15,
+            BaseCost = 5_000, Growth = 5, MaxLevel = 15, RequiredPrestiges = 1,
         },
         new()
         {
             Id = IdleUpgrade.Slots, Name = "Cases renforcées", Icon = UpgradeIcon.NarrowSlots,
             Describe = l => $"Tous les multiplicateurs de cases x1,25 (niveau {l + 1}).",
-            BaseCost = 4_000, Growth = 8, MaxLevel = 30,
+            BaseCost = 50_000, Growth = 11, MaxLevel = 30, RequiredPrestiges = 2,
         },
         new()
         {
             Id = IdleUpgrade.Portal, Name = "Portail dédoubleur", Icon = UpgradeIcon.Portal,
             Describe = l => "Place un portail : chaque bille qui le traverse se dédouble.",
-            BaseCost = 5e5, Growth = 60, MaxLevel = 3, AutoBuyable = false,
+            BaseCost = 1e10, Growth = 200, MaxLevel = 3, AutoBuyable = false, RequiredPrestiges = 8,
         },
         new()
         {
@@ -125,31 +128,31 @@ public static class Upgrades
         {
             Id = IdleUpgrade.Combo, Name = "Rebonds en chaîne", Icon = UpgradeIcon.Xp,
             Describe = l => $"Chaque clou touché pendant la chute ajoute +{(l + 1) * 4}% au gain de la bille.",
-            BaseCost = 150, Growth = 3.2, MaxLevel = 25,
+            BaseCost = 150, Growth = 3.6, MaxLevel = 25,
         },
         new()
         {
             Id = IdleUpgrade.Twin, Name = "Bille jumelle", Icon = UpgradeIcon.TwinBall,
             Describe = l => $"{(l + 1) * 5}% de chances qu'une deuxième bille parte avec la tienne.",
-            BaseCost = 1_500, Growth = 4, MaxLevel = 10,
+            BaseCost = 1e6, Growth = 7, MaxLevel = 10, RequiredPrestiges = 4,
         },
         new()
         {
             Id = IdleUpgrade.Jackpot, Name = "Case jackpot", Icon = UpgradeIcon.Multiplier,
             Describe = l => $"Une case brille : elle rapporte x{IdleManager.JackpotFor(l + 1):0}, puis le jackpot change de case.",
-            BaseCost = 800, Growth = 4, MaxLevel = 20,
+            BaseCost = 20_000, Growth = 5, MaxLevel = 20, RequiredPrestiges = 1,
         },
         new()
         {
             Id = IdleUpgrade.Interest, Name = "Intérêts", Icon = UpgradeIcon.GoldBall,
             Describe = l => $"Toutes les 10 s, +{(l + 1) * 2}% de tes pièces (au plus {(l + 1) * 10} s de gains).",
-            BaseCost = 3_000, Growth = 5, MaxLevel = 10,
+            BaseCost = 1e8, Growth = 8, MaxLevel = 10, RequiredPrestiges = 6,
         },
         new()
         {
             Id = IdleUpgrade.ChestHunter, Name = "Chasseur de coffres", Icon = UpgradeIcon.Chest,
             Describe = l => $"Le coffre en or apparaît {100 - Math.Round(100 * Math.Pow(0.85, l + 1)):0}% plus souvent.",
-            BaseCost = 2_000, Growth = 5, MaxLevel = 8,
+            BaseCost = 100_000, Growth = 6, MaxLevel = 8, RequiredPrestiges = 3,
         },
     };
 

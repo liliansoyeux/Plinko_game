@@ -116,17 +116,16 @@ public partial class ShopPanel : CanvasLayer
         switch (_tab)
         {
             case Tab.Balls:
-                _list.AddChild(Note("Ta bille est gratuite et infinie : une seule à la fois sur le plateau. Forge le palier suivant pour qu'elle rapporte 8 fois plus, et polis-la entre deux paliers."));
+                _list.AddChild(Note("Ta bille est gratuite et infinie : une seule à la fois sur le plateau. Monte-la du niveau 1 au niveau 10 (x1,25 par niveau), puis forge la bille suivante, qui repart au niveau 1 mais rapporte encore plus."));
                 _visibleTiers = idle.TiersUnlocked;
                 Add(new BallRow { Tier = idle.BallTier });
                 if (idle.CanForge)
                 {
                     Add(new BallRow { Tier = idle.TiersUnlocked });
                 }
-                Add(new UpgradeRow { Def = Upgrades.Get(IdleUpgrade.Value) });
                 if (idle.TiersUnlocked + 1 < BallTiers.All.Length)
                 {
-                    _list.AddChild(Note("Forge ce palier pour découvrir le suivant."));
+                    _list.AddChild(Note("Forge ce palier pour découvrir le suivant. Les billes les plus rares demandent aussi des prestiges."));
                 }
                 break;
 
@@ -135,7 +134,8 @@ public partial class ShopPanel : CanvasLayer
                 {
                     _list.AddChild(AutoToggle("Achat automatique des améliorations (Intendant)", idle.AutoBuyUpgrades, v => idle.AutoBuyUpgrades = v));
                 }
-                foreach (var def in System.Linq.Enumerable.OrderBy(Upgrades.All, d => d.BaseCost))
+                // Unlocked upgrades first (by price), then the locked ones by prestige needed.
+                foreach (var def in System.Linq.Enumerable.OrderBy(Upgrades.All, d => (idle.IsUpgradeUnlocked(d) ? 0 : d.RequiredPrestiges, d.BaseCost)))
                 {
                     if (!def.Retired && def.Id != IdleUpgrade.Value)
                     {
@@ -319,7 +319,7 @@ public partial class BallRow : ShopRowBase
 
     protected override void OnBuy()
     {
-        bool ok = Locked && IdleManager.Instance.Forge();
+        bool ok = Locked ? IdleManager.Instance.Forge() : IdleManager.Instance.LevelUpBall();
         Sfx.Play(ok ? Sound.Pick : Sound.Click, ok ? 0.9f + Tier * 0.08f : 0.6f, ok ? -4f : 0f);
     }
 
@@ -328,19 +328,44 @@ public partial class BallRow : ShopRowBase
         var idle = IdleManager.Instance;
         var def = BallTiers.All[Tier];
         double each = def.Value * idle.GlobalMultiplier;
+        if (Locked && Tier == idle.TiersUnlocked && idle.NextForgeLocked)
+        {
+            Title.Text = $"{def.Name}  (verrouillée)";
+            Info.Text = $"Se débloque après {def.RequiredPrestiges} prestiges (tu en as fait {idle.Prestiges}). Elle rapportera {Big.Format(each)} x la case.";
+            Buy.Text = $"{def.RequiredPrestiges} prestiges";
+            Buy.Disabled = true;
+            return;
+        }
         if (Locked)
         {
+            // What it will pay at level 1 (the current level bonus is dropped when forging).
+            double first = def.Value * idle.GlobalMultiplier / idle.BallLevelMultiplier;
             double cost = idle.TierUnlockCost(Tier);
             Title.Text = $"Forger : {def.Name}";
-            Info.Text = $"Chaque bille rapportera {Big.Format(each)} x la case, au lieu de {Big.Format(BallTiers.All[Tier - 1].Value * idle.GlobalMultiplier)}.";
+            if (idle.BallLevel < IdleManager.MaxBallLevel)
+            {
+                Info.Text = $"Monte ta bille au niveau 10 pour la forger. Elle rapportera {Big.Format(first)} x la case dès le niveau 1.";
+                Buy.Text = $"Niveau 10 requis\n{Big.Format(cost)}";
+                Buy.Disabled = true;
+                return;
+            }
+            Info.Text = $"Repart au niveau 1 mais rapporte {Big.Format(first)} x la case, au lieu de {Big.Format(BallTiers.All[Tier - 1].Value * idle.GlobalMultiplier)}.";
             Buy.Text = $"Forger\n{Big.Format(cost)}";
             Buy.Disabled = cost > idle.Coins;
             return;
         }
-        Title.Text = $"{def.Name}  ·  ta bille";
-        Info.Text = $"Gratuite et infinie. Rapporte {Big.Format(each)} x la case où elle tombe.";
-        Buy.Text = "Équipée";
-        Buy.Disabled = true;
+        Title.Text = $"{def.Name}  ·  niveau {idle.BallLevel}/{IdleManager.MaxBallLevel}";
+        if (!idle.CanLevelUpBall)
+        {
+            Info.Text = $"Niveau maximum ! Rapporte {Big.Format(each)} x la case. Forge la bille suivante.";
+            Buy.Text = "Niveau MAX";
+            Buy.Disabled = true;
+            return;
+        }
+        double levelCost = idle.BallLevelCost;
+        Info.Text = $"Rapporte {Big.Format(each)} x la case, {Big.Format(each * 1.25)} au niveau {idle.BallLevel + 1}.";
+        Buy.Text = $"Niveau {idle.BallLevel + 1}\n{Big.Format(levelCost)}";
+        Buy.Disabled = levelCost > idle.Coins;
     }
 
     protected override void DrawIcon(Vector2 center)
@@ -393,6 +418,16 @@ public partial class UpgradeRow : ShopRowBase
         int level = idle.Level(Def.Id);
         bool maxed = idle.IsMaxed(Def.Id);
         Title.Text = Def.MaxLevel == 1 ? Def.Name : $"{Def.Name}  ·  {level}/{Def.MaxLevel}";
+        if (!idle.IsUpgradeUnlocked(Def))
+        {
+            Title.Text = $"{Def.Name}  (verrouillée)";
+            Info.Text = $"Se débloque après {Def.RequiredPrestiges} prestige(s). {Def.Describe(0)}";
+            Buy.Text = $"{Def.RequiredPrestiges} prestige(s)";
+            Buy.Disabled = true;
+            Modulate = new Color(1f, 1f, 1f, 0.6f);
+            return;
+        }
+        Modulate = Colors.White;
         if (IsDropperSwitch)
         {
             bool on = idle.AutoDropEnabled;

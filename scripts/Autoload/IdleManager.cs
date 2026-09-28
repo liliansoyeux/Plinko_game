@@ -21,7 +21,7 @@ public partial class IdleManager : Node
     public const int SlotCount = 13;
     public const double StartingCoins = 50;
     private const double AutosaveSeconds = 15.0;
-    public const double BonusPerJeton = 0.03;  // +3% income per jeton ever earned
+    public const double BonusPerJeton = 0.02;  // +2% income per jeton ever earned
 
     // ---- current run
     public double Coins { get; private set; }
@@ -30,6 +30,12 @@ public partial class IdleManager : Node
     // tier (basic -> silver -> gold ...). TiersUnlocked - 1 is the current tier.
     public int TiersUnlocked { get; private set; } = 1;
     public int BallTier => TiersUnlocked - 1;
+    // Level of the current ball (1..10): x1.25 per level, reset when the next tier is forged.
+    public int BallLevel { get; private set; } = 1;
+    public const int MaxBallLevel = 10;
+    private const double LevelStep = 1.25;
+    private const double LevelCostGrowth = 2.2;
+    public double BallLevelMultiplier => Math.Pow(LevelStep, BallLevel - 1);
     public int[] UpgradeLevels { get; private set; } = new int[Upgrades.All.Length];
     public List<Vector2I> PortalCells { get; } = new();
     public int PendingPortals { get; private set; }
@@ -111,7 +117,7 @@ public partial class IdleManager : Node
 
     public double CostMultiplier => Shoe.CostMultiplier * (1.0 - 0.05 * SkillLevel("e_cost"));
 
-    // Permanent bonuses: every jeton ever earned (+3%), every pair of shoes unlocked (+50%).
+    // Permanent bonuses: every jeton ever earned (+2%), every pair of shoes unlocked (+50%).
     public double PrestigeBonus => (1.0 + BonusPerJeton * JetonsEarnedTotal) * (1.0 + 0.5 * (UnlockedShoes - 1));
 
     public bool HasAchievement(string id) => _achievements.Contains(id);
@@ -119,7 +125,7 @@ public partial class IdleManager : Node
     public double AchievementBonus => 1.0 + Achievements.BonusPerAchievement * _achievements.Count;
 
     public double GlobalMultiplier =>
-        Math.Pow(1.2, Level(IdleUpgrade.Value)) * (1.0 + 0.25 * SkillLevel("f_income")) * PrestigeBonus * AchievementBonus * FrenzyMultiplier;
+        BallLevelMultiplier * (1.0 + 0.25 * SkillLevel("f_income")) * PrestigeBonus * AchievementBonus * FrenzyMultiplier;
 
     // Base multipliers of a board with `rows` rows: x1 in the middle, growing
     // quadratically-exponentially toward the edges; more rows = much bigger edges.
@@ -160,9 +166,45 @@ public partial class IdleManager : Node
         BallTiers.All[tier].ForgeCost * CostMultiplier * (1.0 - 0.1 * SkillLevel("a_balls"));
 
     public bool CanForge => TiersUnlocked < BallTiers.All.Length;
+    // The next tier exists but needs more prestiges first.
+    public bool NextForgeLocked => CanForge && Prestiges < BallTiers.All[TiersUnlocked].RequiredPrestiges;
 
-    // Forges the next ball tier: every ball dropped from now on is of that tier.
-    public bool Forge() => CanForge && UnlockTier(TiersUnlocked);
+    public bool IsUpgradeUnlocked(UpgradeDef def) => Prestiges >= def.RequiredPrestiges;
+
+    // Forges the next ball tier (only at level 10): every ball dropped from now on is of that
+    // tier, back to level 1.
+    public bool Forge()
+    {
+        if (!CanForge || NextForgeLocked || BallLevel < MaxBallLevel || !UnlockTier(TiersUnlocked)) return false;
+        BallLevel = 1;
+        Changed?.Invoke();
+        return true;
+    }
+
+    // Level-ups of a tier are priced from the next forge: the 10 levels together cost about
+    // as much as forging the next tier. The last tier uses a virtual "next" 500x further.
+    public double BallLevelCost
+    {
+        get
+        {
+            int t = BallTier;
+            double next = t + 1 < BallTiers.All.Length ? BallTiers.All[t + 1].ForgeCost : BallTiers.All[t].ForgeCost * 500;
+            return next / Math.Pow(LevelCostGrowth, MaxBallLevel) * Math.Pow(LevelCostGrowth, BallLevel) * CostMultiplier;
+        }
+    }
+
+    public bool CanLevelUpBall => BallLevel < MaxBallLevel;
+
+    public bool LevelUpBall()
+    {
+        if (!CanLevelUpBall) return false;
+        double cost = BallLevelCost;
+        if (cost > Coins) return false;
+        Coins -= cost;
+        BallLevel++;
+        Changed?.Invoke();
+        return true;
+    }
 
     public bool UnlockTier(int tier)
     {
@@ -188,7 +230,7 @@ public partial class IdleManager : Node
 
     public bool BuyUpgrade(IdleUpgrade id)
     {
-        if (IsMaxed(id)) return false;
+        if (IsMaxed(id) || !IsUpgradeUnlocked(Upgrades.Get(id))) return false;
         double cost = UpgradeCost(id);
         if (cost > Coins) return false;
         Coins -= cost;
@@ -339,6 +381,7 @@ public partial class IdleManager : Node
         RunEarned = 0;
         _announcedRank = 0;
         TiersUnlocked = 1;
+        BallLevel = 1;
         UpgradeLevels = new int[Upgrades.All.Length];
         if (SkillLevel("a_auto") > 0)
         {
@@ -507,13 +550,17 @@ public partial class IdleManager : Node
         double cheapestCost = double.MaxValue;
         foreach (var def in Upgrades.All)
         {
-            if (!def.AutoBuyable || IsMaxed(def.Id)) continue;
+            if (!def.AutoBuyable || IsMaxed(def.Id) || !IsUpgradeUnlocked(def)) continue;
             double cost = UpgradeCost(def.Id);
             if (cost < cheapestCost)
             {
                 cheapestCost = cost;
                 cheapest = def;
             }
+        }
+        if (CanLevelUpBall && BallLevelCost < cheapestCost)
+        {
+            return BallLevelCost <= Coins && LevelUpBall();
         }
         return cheapest != null && cheapestCost <= Coins && BuyUpgrade(cheapest.Id);
     }
@@ -526,6 +573,7 @@ public partial class IdleManager : Node
         f.SetValue("run", "coins", Coins);
         f.SetValue("run", "earned", RunEarned);
         f.SetValue("run", "tiers", TiersUnlocked);
+        f.SetValue("run", "ball_level", BallLevel);
         f.SetValue("run", "upgrades", string.Join(",", UpgradeLevels));
         var portals = new List<string>();
         foreach (var c in PortalCells) portals.Add($"{c.X}:{c.Y}");
@@ -573,6 +621,7 @@ public partial class IdleManager : Node
         RunEarned = (double)f.GetValue("run", "earned", 0.0);
         _announcedRank = PrestigeRank;
         TiersUnlocked = Math.Clamp((int)f.GetValue("run", "tiers", 1), 1, BallTiers.All.Length);
+        BallLevel = Math.Clamp((int)f.GetValue("run", "ball_level", 1), 1, MaxBallLevel);
         ParseInts((string)f.GetValue("run", "upgrades", ""), UpgradeLevels);
         foreach (var part in ((string)f.GetValue("run", "portals", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
         {

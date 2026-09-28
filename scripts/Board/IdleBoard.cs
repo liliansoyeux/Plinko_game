@@ -20,7 +20,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private const float RowRatio = 0.9f;
     private const float BaseSpacing = 48f;
     private const int MaxBallsInFlight = 32;     // portal twins included
-    private const double RelaunchDelay = 0.25;    // auto-dropper pause between two balls
+    private const double RelaunchDelay = 0.35;    // auto-dropper pause between two balls
     private const double GoldenChestLifetime = 20.0;
 
     private Node2D _pegs;

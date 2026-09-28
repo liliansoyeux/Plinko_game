@@ -19,6 +19,7 @@ namespace Plinko;
 //   --no-prestige          never prestige
 //   --aim=<0..1>           always aim at that point of the aim range (0 = left, 1 = right)
 //   --prestige-at=<sec>    force one prestige (hardest unlocked shoes) at that real time
+//   --speed=<n>            run the game n times faster (Engine.TimeScale; physics stays fixed-step)
 public partial class AutoPilot : Node
 {
     private readonly Dictionary<string, string> _args = new();
@@ -53,6 +54,12 @@ public partial class AutoPilot : Node
             _args[parts[0]] = parts.Length > 1 ? parts[1] : "true";
         }
         _minutes = Parse("minutes", 10);
+        double speed = Parse("speed", 1);
+        if (speed > 1)
+        {
+            Engine.TimeScale = speed;
+            Engine.MaxPhysicsStepsPerFrame = (int)Math.Ceiling(speed) + 8;
+        }
         _shotEvery = Parse("shot-every", 4);
         _skillsAt = Parse("skills-at", -1);
         _prestigeAt = Parse("prestige-at", -1);
@@ -162,10 +169,11 @@ public partial class AutoPilot : Node
         {
             _buyTimer = 0.5;
             // Forge the next ball tier when it's cheap relative to the bank, then upgrades.
-            if (idle.CanForge && idle.TierUnlockCost(idle.TiersUnlocked) < idle.Coins * 0.6)
+            if (idle.CanForge && !idle.CanLevelUpBall && idle.TierUnlockCost(idle.TiersUnlocked) < idle.Coins * 0.6)
             {
                 idle.Forge();
             }
+            while (idle.CanLevelUpBall && idle.BallLevelCost < idle.Coins * 0.6 && idle.LevelUpBall()) { }
             for (int i = 0; i < 6 && idle.BuyCheapestUpgrade(); i++) { }
             if (!idle.IsMaxed(IdleUpgrade.Portal) && idle.UpgradeCost(IdleUpgrade.Portal) < idle.Coins * 0.5)
             {
@@ -235,7 +243,7 @@ public partial class AutoPilot : Node
     {
         var idle = IdleManager.Instance;
         GD.Print($"[AutoPilot] {tag} t={_gameTime / 60.0:0.0}min coins={Big.Format(idle.Coins)} income={Big.Format(idle.IncomePerSecond)}/s " +
-                 $"run={Big.Format(idle.RunEarned)} tiers={idle.TiersUnlocked} speed={idle.BallSpeed:0.00} upg={string.Join("/", idle.UpgradeLevels)} " +
+                 $"run={Big.Format(idle.RunEarned)} tiers={idle.TiersUnlocked}.{idle.BallLevel} speed={idle.BallSpeed:0.00} upg={string.Join("/", idle.UpgradeLevels)} " +
                  $"jetons={idle.Jetons}/{idle.JetonsEarnedTotal} shoe={idle.ShoeId} unlocked={idle.UnlockedShoes}");
     }
 

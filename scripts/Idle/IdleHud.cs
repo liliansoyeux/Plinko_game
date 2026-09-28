@@ -191,8 +191,9 @@ public partial class IdleHudCanvas : Control
         var ball = BallTiers.All[idle.BallTier];
         var ballGlow = idle.BallTier == 5 ? Pal.Prismatic(_time) : ball.Glow;
         Paint.TextCentered(this, bold, new Vector2(148f, midY - 22f), "TA BILLE", 14, Pal.Alpha(Pal.Pink, 0.9f));
-        Paint.TextCentered(this, black, new Vector2(148f, midY + 2f), ball.Name.Replace("Bille d'", "").Replace("Bille de ", "").Replace("Bille ", "").ToUpper(), 26, Pal.Hdr(ballGlow, 1.1f), 4);
-        string rate = idle.HasAutoDropper ? $"x{Big.Format(ball.Value)} · gravité x{idle.BallSpeed:0.##}" : $"x{Big.Format(ball.Value)} · clique pour lâcher";
+        Paint.TextCentered(this, black, new Vector2(148f, midY + 2f), ball.Name.Replace("Bille d'", "").Replace("Bille de ", "").Replace("Bille ", "").ToUpper() + $" {idle.BallLevel}", 26, Pal.Hdr(ballGlow, 1.1f), 4);
+        string worth = Big.Format(ball.Value * idle.BallLevelMultiplier);
+        string rate = idle.HasAutoDropper ? $"niv {idle.BallLevel}/10 · x{worth} · gravité x{idle.BallSpeed:0.##}" : $"niv {idle.BallLevel}/10 · x{worth} · clique pour lâcher";
         Paint.TextCentered(this, bold, new Vector2(148f, midY + 26f), rate, 12, Pal.TextDim);
 
         // Income.
