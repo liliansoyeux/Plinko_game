@@ -61,6 +61,11 @@ public partial class AutoPilot : Node
             _shotDir = dir;
             DirAccess.MakeDirRecursiveAbsolute(_shotDir);
         }
+        // Start from a blank save (in memory only: saving is disabled for the bot).
+        if (_args.ContainsKey("fresh"))
+        {
+            IdleManager.Instance.WipeSave();
+        }
         if (_args.TryGetValue("grant", out var grant))
         {
             var g = grant.Split(',');

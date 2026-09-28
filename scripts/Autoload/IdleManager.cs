@@ -30,10 +30,9 @@ public partial class IdleManager : Node
     // Consumable stock: a ball is spent when it drops and destroyed when it lands.
     public double[] Stock { get; private set; } = new double[BallTiers.All.Length];
     public int TiersUnlocked { get; private set; } = 1;
-    // Recent purchases per tier ("market pressure"): every ball bought makes the next one of
-    // that tier dearer, and the pressure fades over time so prices come back down.
+    // Balls bought this run, per tier: every purchase makes the next ball of that tier a
+    // little dearer, for good (reset only by a prestige).
     public double[] Bought { get; private set; } = new double[BallTiers.All.Length];
-    private const double MarketHalfLife = 60.0;
     public int[] UpgradeLevels { get; private set; } = new int[Upgrades.All.Length];
     public List<Vector2I> PortalCells { get; } = new();
     public int PendingPortals { get; private set; }
@@ -156,11 +155,11 @@ public partial class IdleManager : Node
 
     // ================================================================ costs & purchases
 
-    // Price of the next ball of a tier: base * (1 + pressure/PriceScale)^PricePower, where the
-    // pressure is recent purchases (halving every minute). Buying a lot pushes the price up;
-    // waiting brings it back down, so the economy can never lock itself.
-    private const double PriceScale = 400.0;
-    private const double PricePower = 1.3;
+    // Price of the next ball of a tier: base * (1 + bought/PriceScale)^PricePower. A light,
+    // permanent rise: +0.05% per ball, x2 after 2,000 balls, x6 after 10,000, which nudges
+    // you toward the next tier without ever locking the economy.
+    private const double PriceScale = 2000.0;
+    private const double PricePower = 1.0;
 
     private double BasePrice(int tier) =>
         BallTiers.All[tier].Price * CostMultiplier * (1.0 - 0.1 * SkillLevel("a_balls"));
@@ -459,12 +458,6 @@ public partial class IdleManager : Node
                 FrenzyTimeLeft = 0;
                 FrenzyMultiplier = 1.0;
             }
-        }
-
-        double decay = Math.Exp(-delta * Math.Log(2.0) / MarketHalfLife);
-        for (int t = 0; t < Bought.Length; t++)
-        {
-            Bought[t] *= decay;
         }
 
         // Anti soft-lock: broke and out of balls? A free basic ball every second.
