@@ -47,7 +47,6 @@ public partial class IdleManager : Node
     private readonly Dictionary<string, int> _skills = new();
     private readonly HashSet<string> _achievements = new();
     private double _achievementTimer;
-    private double _rescueTimer;
     public bool AutoBuyBalls { get; set; } = true;    // auto-restock toggle
     public double LifetimeBallsDropped { get; private set; }
     public bool AutoBuyUpgrades { get; set; } = true;
@@ -155,11 +154,17 @@ public partial class IdleManager : Node
 
     // ================================================================ costs & purchases
 
-    // Price of the next ball of a tier: base * (1 + bought/PriceScale)^PricePower. A light,
-    // permanent rise: +0.05% per ball, x2 after 2,000 balls, x6 after 10,000, which nudges
-    // you toward the next tier without ever locking the economy.
-    private const double PriceScale = 2000.0;
-    private const double PricePower = 1.0;
+    // Price of the next ball of a tier: base * (1 + bought/PriceScale)^PricePower, rising for
+    // good (reset only by a prestige): x2.3 after 1,000 balls, x6 after 4,000, so each tier
+    // stops paying off at some point and pushes you to unlock the next one.
+    private const double PriceScale = 1000.0;
+    private const double PricePower = 1.2;
+
+    // Out of stock, the machine drops free grey balls worth a tenth of a basic ball: the
+    // game never locks, but they're no way to get rich.
+    public const double FreeBallValue = 0.1;
+
+    private static double TierValue(int tier, bool free) => BallTiers.All[tier].Value * (free ? FreeBallValue : 1.0);
 
     private double BasePrice(int tier) =>
         BallTiers.All[tier].Price * CostMultiplier * (1.0 - 0.1 * SkillLevel("a_balls"));
@@ -169,6 +174,15 @@ public partial class IdleManager : Node
         BasePrice(tier) * PriceScale / (PricePower + 1.0) * Math.Pow(1.0 + n / PriceScale, PricePower + 1.0);
 
     public double BallPrice(int tier) => BasePrice(tier) * Math.Pow(1.0 + Bought[tier] / PriceScale, PricePower);
+
+    // Rough average payout of one ball of a tier (slots weighted evenly).
+    public double ExpectedBallValue(int tier)
+    {
+        double sum = 0;
+        var slots = SlotMultipliers();
+        foreach (double m in slots) sum += m;
+        return BallTiers.All[tier].Value * sum / slots.Length * GlobalMultiplier;
+    }
 
     public double BallCost(int tier, double amount) =>
         PriceIntegral(tier, Bought[tier] + amount) - PriceIntegral(tier, Bought[tier]);
@@ -209,8 +223,9 @@ public partial class IdleManager : Node
         return true;
     }
 
-    // Takes up to `count` balls of the best tier in stock for one drop.
-    public (int tier, double taken) TakeForDrop(double count)
+    // Takes up to `count` balls of the best tier in stock for one drop; with an empty stock,
+    // free balls instead.
+    public (int tier, double taken, bool free) TakeForDrop(double count)
     {
         for (int t = TiersUnlocked - 1; t >= 0; t--)
         {
@@ -219,10 +234,10 @@ public partial class IdleManager : Node
                 double taken = Math.Min(Math.Floor(Stock[t]), Math.Max(1, Math.Floor(count)));
                 Stock[t] -= taken;
                 LifetimeBallsDropped += taken;
-                return (t, taken);
+                return (t, taken, false);
             }
         }
-        return (-1, 0);
+        return (0, Math.Max(1, Math.Floor(count)), true);
     }
 
     public bool IsMaxed(IdleUpgrade id) => Upgrades.Get(id).Retired || Level(id) >= Upgrades.Get(id).MaxLevel;
@@ -278,18 +293,18 @@ public partial class IdleManager : Node
     }
 
     // A ball landed: returns the payout and whether it was a critical hit.
-    public (double payout, bool crit) Land(int tier, double stack, double slotMultiplier)
+    public (double payout, bool crit) Land(int tier, double stack, double slotMultiplier, bool free = false)
     {
         bool crit = GD.Randf() < CritChance;
-        double payout = BallTiers.All[tier].Value * stack * slotMultiplier * GlobalMultiplier * (crit ? CritMultiplier : 1.0);
+        double payout = TierValue(tier, free) * stack * slotMultiplier * GlobalMultiplier * (crit ? CritMultiplier : 1.0);
         Earn(payout);
         return (payout, crit);
     }
 
-    public double PegHit(int tier, double stack)
+    public double PegHit(int tier, double stack, bool free = false)
     {
         if (PegFraction <= 0) return 0;
-        double payout = BallTiers.All[tier].Value * stack * PegFraction * GlobalMultiplier;
+        double payout = TierValue(tier, free) * stack * PegFraction * GlobalMultiplier;
         Earn(payout);
         return payout;
     }
@@ -460,17 +475,6 @@ public partial class IdleManager : Node
             }
         }
 
-        // Anti soft-lock: broke and out of balls? A free basic ball every second.
-        if (TotalStock < 1 && Coins < BallPrice(0))
-        {
-            _rescueTimer += delta;
-            if (_rescueTimer >= 1.0)
-            {
-                _rescueTimer = 0;
-                Stock[0] += 1;
-            }
-        }
-
         _achievementTimer += delta;
         if (_achievementTimer >= 0.5)
         {
@@ -539,6 +543,8 @@ public partial class IdleManager : Node
         order.Sort((a, b) => (BallTiers.All[b].Value / BallPrice(b)).CompareTo(BallTiers.All[a].Value / BallPrice(a)));
         foreach (int t in order)
         {
+            // Balls dearer than what they pay back aren't worth it: free balls do better.
+            if (BallPrice(t) > ExpectedBallValue(t)) continue;
             // Never spend more than half the bank on stock: upgrades need coins too.
             double half = Coins * 0.5;
             double affordable = Math.Floor(half / BallPrice(t));
@@ -551,11 +557,6 @@ public partial class IdleManager : Node
             {
                 return true;
             }
-        }
-        // Broke and out of balls: spend whatever is left on basic balls so the game never stalls.
-        if (TotalStock < 1 && Coins >= BallPrice(0))
-        {
-            return BuyBalls(0, MaxAffordableBalls(0));
         }
         return false;
     }

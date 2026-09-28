@@ -20,7 +20,7 @@ public static class BallTiers
 {
     public static readonly BallTierDef[] All =
     {
-        new() { Index = 0, Name = "Bille", Color = new Color(0.98f, 0.93f, 1f), Glow = Pal.Pink, Value = 1, Price = 1, UnlockCost = 0 },
+        new() { Index = 0, Name = "Bille", Color = new Color(0.98f, 0.93f, 1f), Glow = Pal.Pink, Value = 1, Price = 1.5, UnlockCost = 0 },
         new() { Index = 1, Name = "Bille d'argent", Color = new Color(0.82f, 0.88f, 0.96f), Glow = new Color(0.6f, 0.8f, 1f), Value = 8, Price = 7, UnlockCost = 1_000 },
         new() { Index = 2, Name = "Bille d'or", Color = new Color(1f, 0.8f, 0.3f), Glow = Pal.Gold, Value = 64, Price = 50, UnlockCost = 400_000 },
         new() { Index = 3, Name = "Bille de diamant", Color = new Color(0.75f, 1f, 1f), Glow = Pal.Cyan, Value = 512, Price = 350, UnlockCost = 1.5e8 },

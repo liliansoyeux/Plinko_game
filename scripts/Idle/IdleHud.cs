@@ -96,7 +96,7 @@ public partial class IdleHudCanvas : Control
         Paint.TextCentered(this, bold, new Vector2(148f, midY - 22f), "STOCK DE BILLES", 14, Pal.Alpha(empty ? Pal.Red : Pal.Pink, 0.9f));
         Paint.TextCentered(this, black, new Vector2(148f, midY + 2f), Big.Format(idle.TotalStock), 34, Pal.Hdr(empty ? Pal.Red : Pal.Text, 1.1f), 4);
         string rate = idle.HasAutoDropper ? $"{Big.Format(idle.Cadence)} billes/s" : "clique pour lâcher";
-        Paint.TextCentered(this, bold, new Vector2(148f, midY + 26f), empty ? "achète des billes !" : rate, 12, empty ? Pal.Red : Pal.TextDim);
+        Paint.TextCentered(this, bold, new Vector2(148f, midY + 26f), empty ? "billes grises gratuites" : rate, 12, empty ? Pal.Red : Pal.TextDim);
 
         // Income.
         bool frenzy = idle.FrenzyTimeLeft > 0;

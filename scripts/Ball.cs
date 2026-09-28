@@ -13,6 +13,7 @@ public partial class Ball : RigidBody2D
     public int Tier;
     public double Stack = 1.0;     // how many balls this physical ball carries (bundled drops)
     public bool IsTwin;            // free duplicate made by a portal
+    public bool IsFree;            // free grey ball dropped when out of stock
     public readonly HashSet<int> PortalsUsed = new();
 
     private const double StuckThresholdSeconds = 0.4;
@@ -85,6 +86,12 @@ public partial class Ball : RigidBody2D
     {
         var def = BallTiers.All[Tier];
         var glow = Tier == 5 ? Pal.Prismatic(_time) : def.Glow;
+        var color = def.Color;
+        if (IsFree)
+        {
+            glow = new Color(0.45f, 0.45f, 0.5f);
+            color = new Color(0.55f, 0.55f, 0.6f);
+        }
 
         for (int i = 1; i < _trailCount; i++)
         {
@@ -94,15 +101,15 @@ public partial class Ball : RigidBody2D
 
         float r = Radius * (0.4f + 0.6f * _spawnScale);
         Paint.Halo(this, Vector2.Zero, r * (2.2f + 0.2f * Tier), Pal.Alpha(glow, 0.3f + 0.06f * Tier));
-        DrawCircle(Vector2.Zero, r, Pal.Hdr(def.Color, 1.1f + 0.05f * Tier));
-        DrawCircle(new Vector2(0f, r * 0.18f), r * 0.82f, Pal.Alpha(def.Color.Darkened(0.35f), 0.45f));
+        DrawCircle(Vector2.Zero, r, IsFree ? color : Pal.Hdr(color, 1.1f + 0.05f * Tier));
+        DrawCircle(new Vector2(0f, r * 0.18f), r * 0.82f, Pal.Alpha(color.Darkened(0.35f), 0.45f));
         if (Tier == 3)
         {
             // Diamond facets.
             DrawLine(new Vector2(-r * 0.6f, 0f), new Vector2(r * 0.6f, 0f), Pal.Alpha(Colors.White, 0.5f), 1f);
             DrawLine(new Vector2(0f, -r * 0.6f), new Vector2(0f, r * 0.6f), Pal.Alpha(Colors.White, 0.35f), 1f);
         }
-        DrawCircle(new Vector2(-r * 0.32f, -r * 0.36f), r * 0.32f, Pal.Hdr(Colors.White, 1.6f));
+        DrawCircle(new Vector2(-r * 0.32f, -r * 0.36f), r * 0.32f, IsFree ? Pal.Alpha(Colors.White, 0.6f) : Pal.Hdr(Colors.White, 1.6f));
         if (IsTwin)
         {
             DrawArc(Vector2.Zero, r + 2f, 0f, Mathf.Tau, 20, Pal.Alpha(Pal.Prismatic(_time), 0.8f), 1.5f, true);

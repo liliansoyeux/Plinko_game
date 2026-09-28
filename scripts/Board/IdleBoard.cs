@@ -213,7 +213,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         }
         slot.Pulse();
         LandingCounts[_slotList.IndexOf(slot)]++;
-        var (payout, crit) = IdleManager.Instance.Land(ball.Tier, ball.Stack, slot.Multiplier);
+        var (payout, crit) = IdleManager.Instance.Land(ball.Tier, ball.Stack, slot.Multiplier, ball.IsFree);
         Landed?.Invoke(slot, ball, payout, crit);
         ball.Settle();
     }
@@ -279,13 +279,14 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         ball.LinearVelocity = new Vector2(-side, velocity.Y);
         int tier = ball.Tier;
         double stack = ball.Stack;
+        bool free = ball.IsFree;
         float radius = ball.Radius;
 
         // Spawned deferred: we're inside a physics callback.
         Callable.From(() =>
         {
             if (!IsInstanceValid(this) || !IsInsideTree()) return;
-            var twin = Spawn(tier, stack, true, origin + new Vector2(radius * 0.6f, 0f), new Vector2(side, velocity.Y));
+            var twin = Spawn(tier, stack, true, free, origin + new Vector2(radius * 0.6f, 0f), new Vector2(side, velocity.Y));
             twin.PortalsUsed.UnionWith(used);
             BallDuplicated?.Invoke(ToGlobal(origin));
         }).CallDeferred();
@@ -299,14 +300,10 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         {
             return false;
         }
-        var (tier, taken) = IdleManager.Instance.TakeForDrop(count);
-        if (tier < 0)
-        {
-            return false;
-        }
+        var (tier, taken, free) = IdleManager.Instance.TakeForDrop(count);
         // Auto drops appear just above the first row, a little randomly in height too.
         float y = launcher ? LauncherY + _s * 0.2f : _top - _s * (0.5f + (float)GD.Randf() * 0.4f);
-        Spawn(tier, taken, false, new Vector2(x, y), new Vector2((float)GD.RandRange(-12.0, 12.0), 40f));
+        Spawn(tier, taken, false, free, new Vector2(x, y), new Vector2((float)GD.RandRange(-12.0, 12.0), 40f));
         if (launcher)
         {
             _launcherPulse = 1f;
@@ -324,7 +321,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         return dropped;
     }
 
-    private Ball Spawn(int tier, double stack, bool twin, Vector2 position, Vector2 velocity)
+    private Ball Spawn(int tier, double stack, bool twin, bool free, Vector2 position, Vector2 velocity)
     {
         // Small enough (max ~15.4 across at tier 5) to fit the 18-wide gap between a wall and
         // the outermost peg of a row.
@@ -336,6 +333,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             Tier = tier,
             Stack = stack,
             IsTwin = twin,
+            IsFree = free,
             Position = position,
             LinearVelocity = velocity,
         };
@@ -346,7 +344,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         return ball;
     }
 
-    private void OnBallPegHit(Ball ball) => IdleManager.Instance.PegHit(ball.Tier, ball.Stack);
+    private void OnBallPegHit(Ball ball) => IdleManager.Instance.PegHit(ball.Tier, ball.Stack, ball.IsFree);
 
     // The ball is spent: nothing goes back to the stock.
     private void OnBallRemoved(Ball ball) => _inFlight = Math.Max(0, _inFlight - 1);

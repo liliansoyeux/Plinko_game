@@ -123,7 +123,7 @@ public partial class ShopPanel : CanvasLayer
         {
             case Tab.Balls:
                 _list.AddChild(BuildAmountBar());
-                _list.AddChild(Note("Chaque bille achetée tombe une seule fois puis disparaît. Chaque achat fait monter un peu le prix de ce type de bille, jusqu'à la prochaine paire de chaussures."));
+                _list.AddChild(Note("Chaque bille achetée tombe une seule fois puis disparaît. Chaque achat fait monter le prix de ce type de bille, jusqu'à la prochaine paire de chaussures. Stock vide ? La machine lâche des billes grises gratuites, qui rapportent 10 fois moins qu'une bille classique."));
                 if (idle.HasAutoRestock)
                 {
                     _list.AddChild(AutoToggle("Réapprovisionnement automatique", idle.AutoBuyBalls, v => idle.AutoBuyBalls = v));
