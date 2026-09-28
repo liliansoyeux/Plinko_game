@@ -39,6 +39,11 @@ public enum IdleUpgrade
     Slots,
     Portal,
     AutoRestock,
+    Combo,
+    Twin,
+    Jackpot,
+    Interest,
+    ChestHunter,
 }
 
 public class UpgradeDef
@@ -115,6 +120,36 @@ public static class Upgrades
             Id = IdleUpgrade.AutoRestock, Name = "Réapprovisionnement auto", Icon = UpgradeIcon.ExtraBalls,
             Describe = _ => "",
             BaseCost = 150, Growth = 1, MaxLevel = 1, Retired = true,
+        },
+        new()
+        {
+            Id = IdleUpgrade.Combo, Name = "Rebonds en chaîne", Icon = UpgradeIcon.Xp,
+            Describe = l => $"Chaque clou touché pendant la chute ajoute +{(l + 1) * 4}% au gain de la bille.",
+            BaseCost = 150, Growth = 3.2, MaxLevel = 25,
+        },
+        new()
+        {
+            Id = IdleUpgrade.Twin, Name = "Bille jumelle", Icon = UpgradeIcon.TwinBall,
+            Describe = l => $"{(l + 1) * 5}% de chances qu'une deuxième bille parte avec la tienne.",
+            BaseCost = 1_500, Growth = 6, MaxLevel = 10,
+        },
+        new()
+        {
+            Id = IdleUpgrade.Jackpot, Name = "Case jackpot", Icon = UpgradeIcon.Multiplier,
+            Describe = l => $"Une case brille : elle rapporte x{IdleManager.JackpotFor(l + 1):0}, puis le jackpot change de case.",
+            BaseCost = 800, Growth = 4, MaxLevel = 20,
+        },
+        new()
+        {
+            Id = IdleUpgrade.Interest, Name = "Intérêts", Icon = UpgradeIcon.GoldBall,
+            Describe = l => $"Toutes les 10 s, +{(l + 1) * 2}% de tes pièces (au plus {(l + 1) * 10} s de gains).",
+            BaseCost = 3_000, Growth = 7, MaxLevel = 10,
+        },
+        new()
+        {
+            Id = IdleUpgrade.ChestHunter, Name = "Chasseur de coffres", Icon = UpgradeIcon.Chest,
+            Describe = l => $"Le coffre en or apparaît {100 - Math.Round(100 * Math.Pow(0.85, l + 1)):0}% plus souvent.",
+            BaseCost = 2_000, Growth = 5, MaxLevel = 8,
         },
     };
 

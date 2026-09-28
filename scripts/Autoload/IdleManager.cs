@@ -16,6 +16,7 @@ public partial class IdleManager : Node
     public event Action<PlaceableKind> PlacementRequested;
     public event Action<string, string, Color> Announce;
     public event Action<AchievementDef> AchievementUnlocked;
+    public event Action<double> InterestPaid;
 
     public const int SlotCount = 13;
     public const double StartingCoins = 50;
@@ -59,6 +60,7 @@ public partial class IdleManager : Node
     private double _bucketTime;
     private double _autosaveTimer;
     private double _autoBuyTimer;
+    private double _interestTimer;
     private bool _loaded;
 
     public CharacterDef Shoe => Characters.ById(ShoeId);
@@ -92,6 +94,12 @@ public partial class IdleManager : Node
     // One ball on the board at a time: "Gravité" makes it fall (and come back) faster.
     public double BallSpeed =>
         (1.0 + 0.15 * Level(IdleUpgrade.Cadence)) * (1.0 + 0.15 * SkillLevel("a_auto")) * Shoe.CadenceMultiplier;
+
+    public double ComboPerHit => 0.04 * Level(IdleUpgrade.Combo);
+    public double TwinChance => 0.05 * Level(IdleUpgrade.Twin);
+    public bool HasJackpot => Level(IdleUpgrade.Jackpot) > 0;
+    public double JackpotMultiplier => JackpotFor(Level(IdleUpgrade.Jackpot));
+    public static double JackpotFor(int level) => level <= 0 ? 1.0 : 3.0 + 2.0 * (level - 1);
 
     public double CritChance => Math.Min(0.6, 0.03 * Level(IdleUpgrade.Critical));
     public double CritMultiplier => 10 + 5 * SkillLevel("f_crit");
@@ -183,7 +191,7 @@ public partial class IdleManager : Node
         if (cost > Coins) return false;
         Coins -= cost;
         UpgradeLevels[(int)id]++;
-        if (id is IdleUpgrade.Rows or IdleUpgrade.Slots)
+        if (id is IdleUpgrade.Rows or IdleUpgrade.Slots or IdleUpgrade.Jackpot)
         {
             BoardLayoutChanged?.Invoke();
         }
@@ -221,10 +229,11 @@ public partial class IdleManager : Node
     }
 
     // A ball landed: returns the payout and whether it was a critical hit.
-    public (double payout, bool crit) Land(int tier, double stack, double slotMultiplier)
+    // `pegHits`: pegs touched during the fall, each one adding to the payout (Rebonds en chaîne).
+    public (double payout, bool crit) Land(int tier, double stack, double slotMultiplier, int pegHits = 0)
     {
         bool crit = GD.Randf() < CritChance;
-        double payout = BallTiers.All[tier].Value * stack * slotMultiplier * GlobalMultiplier * (crit ? CritMultiplier : 1.0);
+        double payout = BallTiers.All[tier].Value * stack * slotMultiplier * (1.0 + ComboPerHit * pegHits) * GlobalMultiplier * (crit ? CritMultiplier : 1.0);
         Earn(payout);
         return (payout, crit);
     }
@@ -252,7 +261,8 @@ public partial class IdleManager : Node
         return ("JACKPOT DU COFFRE !", $"+{Big.Format(lump)} pièces");
     }
 
-    public double GoldenChestInterval => (70.0 + GD.Randf() * 80.0) * Math.Pow(0.7, SkillLevel("e_chest"));
+    public double GoldenChestInterval =>
+        (70.0 + GD.Randf() * 80.0) * Math.Pow(0.7, SkillLevel("e_chest")) * Math.Pow(0.85, Level(IdleUpgrade.ChestHunter));
 
     // ================================================================ prestige
 
@@ -395,6 +405,23 @@ public partial class IdleManager : Node
             {
                 FrenzyTimeLeft = 0;
                 FrenzyMultiplier = 1.0;
+            }
+        }
+
+        // Intérêts: a share of the bank every 10 s, capped by recent income so it can't snowball.
+        int interest = Level(IdleUpgrade.Interest);
+        _interestTimer += delta;
+        if (_interestTimer >= 10.0)
+        {
+            _interestTimer = 0;
+            if (interest > 0)
+            {
+                double gain = Math.Min(Coins * 0.02 * interest, Math.Max(0, IncomePerSecond) * 10.0 * interest);
+                Earn(gain, countsAsIncome: false);
+                if (gain >= 1)
+                {
+                    InterestPaid?.Invoke(gain);
+                }
             }
         }
 

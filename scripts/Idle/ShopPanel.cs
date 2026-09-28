@@ -135,7 +135,7 @@ public partial class ShopPanel : CanvasLayer
                 {
                     _list.AddChild(AutoToggle("Achat automatique des améliorations (Intendant)", idle.AutoBuyUpgrades, v => idle.AutoBuyUpgrades = v));
                 }
-                foreach (var def in Upgrades.All)
+                foreach (var def in System.Linq.Enumerable.OrderBy(Upgrades.All, d => d.BaseCost))
                 {
                     if (!def.Retired && def.Id != IdleUpgrade.Value)
                     {

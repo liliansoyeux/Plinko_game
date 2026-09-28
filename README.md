@@ -22,6 +22,7 @@ Jeu incrémental (idle) de Plinko en Godot 4.7 / C#, inspiré de Cookie Clicker,
   - clous dorés (les clous rapportent) ;
   - coup critique (x10) ;
   - cases renforcées (x1,3 par niveau) ;
+  - rebonds en chaîne (chaque clou touché augmente le gain de la bille), bille jumelle (une deuxième bille part parfois avec la tienne), case jackpot (une case brille et rapporte beaucoup plus, puis change de place), intérêts (un pourcentage de tes pièces toutes les 10 s), chasseur de coffres ;
   - portail dédoubleur, que l'on place soi-même et qui dédouble les billes.
 - **Coffre en or** : il apparaît de temps en temps sur le plateau. Une bille qui le touche déclenche une **frénésie** (gains x7 pendant 30 s) ou un **gros lot** de pièces.
 - **Gains hors-ligne** : une partie de tes revenus continue pendant ton absence (25 % sur 4 h au départ, améliorable).

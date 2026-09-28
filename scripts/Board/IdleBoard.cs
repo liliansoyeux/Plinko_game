@@ -14,6 +14,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     public event Action<Slot, Ball, double, bool> Landed;   // slot, ball, payout, crit
     public event Action<Chest, string, string> GoldenChestOpened;
     public event Action<Vector2> BallDuplicated;
+    public event Action<Vector2> JackpotHit;
 
     private const float MaxSpacing = 58f;
     private const float RowRatio = 0.9f;
@@ -32,6 +33,7 @@ public partial class IdleBoard : Node2D, IPlacementBoard
     private readonly HashSet<Vector2I> _occupied = new();
 
     private double _relaunchTimer;
+    private int _jackpotIndex = -1;
     private int _inFlight;
 
     private int _rows = -1;
@@ -199,6 +201,29 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             _slots.AddChild(slot);
             _slotList.Add(slot);
         }
+        _jackpotIndex = -1;
+        UpdateJackpot();
+    }
+
+    // Case jackpot: one slot glows and pays extra, then the jackpot moves elsewhere.
+    private void UpdateJackpot(bool move = false)
+    {
+        var idle = IdleManager.Instance;
+        if (!idle.HasJackpot || _slotList.Count == 0)
+        {
+            return;
+        }
+        if (move || _jackpotIndex < 0)
+        {
+            int next;
+            do { next = (int)(GD.Randi() % (uint)_slotList.Count); } while (next == _jackpotIndex && _slotList.Count > 1);
+            _jackpotIndex = next;
+        }
+        for (int i = 0; i < _slotList.Count; i++)
+        {
+            _slotList[i].Jackpot = i == _jackpotIndex;
+            _slotList[i].JackpotMultiplier = (float)idle.JackpotMultiplier;
+        }
     }
 
     private void OnSlotEntered(Slot slot, Ball ball)
@@ -208,10 +233,18 @@ public partial class IdleBoard : Node2D, IPlacementBoard
             return;
         }
         slot.Pulse();
-        LandingCounts[_slotList.IndexOf(slot)]++;
-        var (payout, crit) = IdleManager.Instance.Land(ball.Tier, ball.Stack, slot.Multiplier);
+        int index = _slotList.IndexOf(slot);
+        LandingCounts[index]++;
+        bool jackpot = slot.Jackpot;
+        double multiplier = slot.Multiplier * (jackpot ? slot.JackpotMultiplier : 1f);
+        var (payout, crit) = IdleManager.Instance.Land(ball.Tier, ball.Stack, multiplier, ball.PegHits);
         Landed?.Invoke(slot, ball, payout, crit);
         ball.Settle();
+        if (jackpot)
+        {
+            JackpotHit?.Invoke(slot.GlobalPosition);
+            UpdateJackpot(move: true);
+        }
     }
 
     // ---------------------------------------------------------------- cells & portals
@@ -305,6 +338,13 @@ public partial class IdleBoard : Node2D, IPlacementBoard
         // Auto drops appear just above the first row, a little randomly in height too.
         float y = launcher ? LauncherY + _s * 0.2f : _top - _s * (0.5f + (float)GD.Randf() * 0.4f);
         Spawn(tier, taken, false, new Vector2(x, y), new Vector2((float)GD.RandRange(-12.0, 12.0), 40f));
+        // Bille jumelle: sometimes a second ball goes along.
+        if (GD.Randf() < IdleManager.Instance.TwinChance)
+        {
+            float side = x < _cx ? 1f : -1f;
+            Spawn(tier, taken, true, new Vector2(x + side * _s * 0.8f, y), new Vector2(side * 30f, 40f));
+            IdleManager.Instance.CountDrop(taken);
+        }
         if (launcher)
         {
             _launcherPulse = 1f;

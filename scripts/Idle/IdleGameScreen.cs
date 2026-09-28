@@ -48,6 +48,12 @@ public partial class IdleGameScreen : Node2D
         AddChild(Board);
         Board.Landed += OnLanded;
         Board.GoldenChestOpened += OnGoldenChest;
+        Board.JackpotHit += pos =>
+        {
+            Fx.Burst(_fx, pos, Pal.Prismatic((float)Time.GetTicksMsec() / 1000f), 40, 420f, 0.9f, 80f);
+            Sfx.Play(Sound.Jackpot, 1.25f, -3f);
+            _camera.AddTrauma(0.3f);
+        };
         Board.BallDuplicated += pos =>
         {
             Fx.Burst(_fx, pos, Pal.Prismatic((float)Time.GetTicksMsec() / 1000f), 12, 200f, 0.5f);
@@ -81,6 +87,7 @@ public partial class IdleGameScreen : Node2D
 
         idle.PlacementRequested += OnPlacementRequested;
         idle.Announce += OnAnnounce;
+        idle.InterestPaid += OnInterest;
         idle.AchievementUnlocked += OnAchievement;
 
         for (int i = 0; i < idle.PendingPortals; i++)
@@ -107,6 +114,7 @@ public partial class IdleGameScreen : Node2D
         var idle = IdleManager.Instance;
         idle.PlacementRequested -= OnPlacementRequested;
         idle.Announce -= OnAnnounce;
+        idle.InterestPaid -= OnInterest;
         idle.AchievementUnlocked -= OnAchievement;
         GetTree().Paused = false;
     }
@@ -262,6 +270,12 @@ public partial class IdleGameScreen : Node2D
         _toast = new AchievementToast { Achievement = _toasts.Dequeue() };
         _toast.TreeExited += ShowNextToast;
         AddChild(_toast);
+    }
+
+    private void OnInterest(double gain)
+    {
+        Fx.FloatText(_fx, new Vector2(405f, 250f), $"INTÉRÊTS +{Big.Format(gain)}", Pal.Gold, 22, 50f, 1.4f);
+        Sfx.Play(Sound.Pick, 1.3f, -8f);
     }
 
     private void OnAnnounce(string title, string text, Color color)

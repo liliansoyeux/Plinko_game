@@ -8,6 +8,8 @@ public partial class Slot : Area2D
     public event Action<Slot, Ball> BallEntered;
 
     public float Multiplier = 1f;
+    public bool Jackpot;
+    public float JackpotMultiplier = 1f;
     public Vector2 SlotSize = new(46f, 60f);
 
     private float _pulse;
@@ -52,15 +54,15 @@ public partial class Slot : Area2D
     {
         _pulse = Mathf.Max(0f, _pulse - (float)delta * 2.8f);
         _blinkRemaining = Math.Max(0.0, _blinkRemaining - delta);
-        _idlePhase += (float)delta * (Multiplier >= 10f ? 3f : 1.2f);
+        _idlePhase += (float)delta * (Jackpot ? 5f : Multiplier >= 10f ? 3f : 1.2f);
         QueueRedraw();
     }
 
     public override void _Draw()
     {
-        var color = Pal.ForMultiplier(Multiplier);
+        var color = Jackpot ? Pal.Prismatic(_idlePhase * 0.5f) : Pal.ForMultiplier(Multiplier);
         bool blinking = _blinkRemaining > 0 && ((int)(_blinkRemaining * 8) % 2 == 0);
-        float idle = Multiplier >= 10f ? 0.5f + 0.5f * Mathf.Sin(_idlePhase) : 0.3f;
+        float idle = Jackpot || Multiplier >= 10f ? 0.5f + 0.5f * Mathf.Sin(_idlePhase) : 0.3f;
         float energy = Mathf.Max(_pulse, blinking ? 1f : 0f);
 
         float w = SlotSize.X;
@@ -83,7 +85,7 @@ public partial class Slot : Area2D
         DrawLine(new Vector2(rect.Position.X + 3f, rect.Position.Y + 1.5f), new Vector2(rect.End.X - 3f, rect.Position.Y + 1.5f),
             Pal.Hdr(color, 1.6f + 2f * energy), 3f, true);
 
-        string text = Pal.FormatMultiplier(Multiplier);
+        string text = Pal.FormatMultiplier(Jackpot ? Multiplier * JackpotMultiplier : Multiplier);
         int size = (int)Mathf.Clamp(w * 0.4f, 11f, 19f);
         var font = Fonts.Bold;
         while (size > 9 && font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X > w - 6f)

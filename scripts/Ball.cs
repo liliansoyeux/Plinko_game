@@ -13,6 +13,7 @@ public partial class Ball : RigidBody2D
     public int Tier;
     public double Stack = 1.0;     // how many balls this physical ball carries (bundled drops)
     public bool IsTwin;            // free duplicate made by a portal
+    public int PegHits;            // pegs touched during this fall
     public readonly HashSet<int> PortalsUsed = new();
 
     private const double StuckThresholdSeconds = 0.4;
@@ -61,6 +62,7 @@ public partial class Ball : RigidBody2D
         if (body is Peg peg)
         {
             peg.Hit(Tier >= 2);
+            PegHits++;
             float pitch = 0.85f + GD.Randf() * 0.4f + Mathf.Clamp(GlobalPosition.Y / 1600f, 0f, 0.4f) + Tier * 0.05f;
             Sfx.Play(Sound.Peg, pitch, -12f);
             PegHit?.Invoke(this);
