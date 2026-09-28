@@ -11,7 +11,6 @@ public partial class IdleHud : CanvasLayer
 
     public IdleBoard Board;
     private Button _sound;
-    private Button _auto;
     private SoundMenu _soundMenu;
 
     public override void _Ready()
@@ -28,12 +27,6 @@ public partial class IdleHud : CanvasLayer
         var buttons = new HBoxContainer { Position = new Vector2(746f, 18f), MouseFilter = Control.MouseFilterEnum.Ignore };
         buttons.AddThemeConstantOverride("separation", 8);
         root.AddChild(buttons);
-        _auto = SmallButton("AUTO", "Lâcher automatique : marche / arrêt (A)");
-        _auto.CustomMinimumSize = new Vector2(78f, 40f);
-        _auto.AddThemeFontSizeOverride("font_size", 15);
-        _auto.Pressed += ToggleAutoDrop;
-        buttons.AddChild(_auto);
-        buttons.Position = new Vector2(660f, 18f);
         _sound = SmallButton("♪", "Son et musique");
         _sound.Pressed += ToggleSoundMenu;
         buttons.AddChild(_sound);
@@ -88,16 +81,6 @@ public partial class IdleHud : CanvasLayer
         if (!idle.HasAutoDropper) return;
         idle.AutoDropEnabled = !idle.AutoDropEnabled;
         idle.Save();
-    }
-
-    public override void _Process(double delta)
-    {
-        var idle = IdleManager.Instance;
-        _auto.Visible = idle.HasAutoDropper;
-        bool on = idle.AutoDropEnabled;
-        _auto.Text = on ? "AUTO" : "MANUEL";
-        _auto.AddThemeColorOverride("font_color", on ? Pal.Green : Pal.TextDim);
-        _auto.AddThemeColorOverride("font_hover_color", on ? Pal.Green.Lightened(0.3f) : Pal.Text);
     }
 
     private void RefreshSound()
